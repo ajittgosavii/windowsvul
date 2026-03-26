@@ -41,6 +41,9 @@ from itsm_integration import (
     ServiceNowConfig,
     create_servicenow_client,
 )
+from agentic_core import AutonomousAgent, AgentEvent, EventType, PolicyEngine
+from patch_manager import SSMPatchManager
+from watcher_agent import WatcherAgent
 
 # ==================== PAGE CONFIG ====================
 st.set_page_config(
@@ -928,11 +931,12 @@ st.markdown(f"""
 
 
 # ==================== TABS ====================
-(tab_dashboard, tab_fleet, tab_agent, tab_pipeline,
+(tab_dashboard, tab_fleet, tab_brain, tab_agent, tab_pipeline,
  tab_approvals, tab_itsm, tab_compliance, tab_scripts, tab_compare) = st.tabs([
     "📊 Dashboard",
     "🌐 Fleet View",
-    "🤖 AI Agent",
+    "🧠 Agent Brain",
+    "🤖 AI Chat",
     "⚡ Pipeline",
     "✋ Approval Queue",
     "🎫 ITSM / ServiceNow",
@@ -1374,7 +1378,210 @@ with tab_fleet:
             st.bar_chart(pd.DataFrame(list(env_counts.items()), columns=["Environment", "Count"]).set_index("Environment"))
 
 
-# ==================== TAB: AI AGENT ====================
+# ==================== TAB: AGENT BRAIN (Control Plane) ====================
+with tab_brain:
+    st.markdown("#### 🧠 Autonomous Agent — Control Plane")
+    st.caption("This is NOT a dashboard. This is the observation deck for your autonomous AI security engineer.")
+
+    # Initialize autonomous agent
+    if "autonomous_agent" not in st.session_state:
+        _claude = None
+        _openai_c = None
+        if api_key:
+            try:
+                import anthropic
+                _claude = anthropic.Anthropic(api_key=api_key)
+            except ImportError:
+                pass
+        if openai_key:
+            try:
+                from openai import OpenAI
+                _openai_c = OpenAI(api_key=openai_key)
+            except ImportError:
+                pass
+        st.session_state["autonomous_agent"] = AutonomousAgent(
+            claude_client=_claude,
+            openai_client=_openai_c,
+            aws_connector=st.session_state.get("aws_connector"),
+            itsm_client=st.session_state.get("snow_client"),
+        )
+
+    auto_agent = st.session_state["autonomous_agent"]
+
+    # ---- Agent Status ----
+    status = auto_agent.get_status()
+    s1, s2, s3, s4, s5 = st.columns(5)
+    s1.metric("Cycles Run", status["cycle_count"])
+    s2.metric("Events Processed", status["processed_events"])
+    s3.metric("Actions Taken", status["total_actions"])
+    s4.metric("Memories", status["memory_stats"]["total_memories"])
+    s5.metric("Active Policies", status["policies_active"])
+
+    st.divider()
+
+    # ---- Run Agent Cycle ----
+    brain_col1, brain_col2 = st.columns([2, 1])
+
+    with brain_col1:
+        st.markdown("#### Agent Actions")
+
+        if st.button("🧠 Run Agent Cycle", type="primary", use_container_width=True, key="run_brain_cycle"):
+            _srvs = get_servers()
+            _state_str = json.dumps([{
+                "hostname": s.hostname, "instance_id": s.instance_id,
+                "status": s.status, "ssm": s.ssm_status, "region": s.region,
+                "critical": s.critical_vulns, "high": s.high_vulns,
+                "compliance": f"{s.patch_compliance:.0%}",
+                "env": s.tags.get("Environment", "N/A"),
+            } for s in _srvs], indent=2)
+
+            # Inject threat events from watcher
+            watcher = WatcherAgent()
+            with st.spinner("Checking NVD & CISA KEV for new threats..."):
+                alerts = watcher.run_full_check()
+            for alert in alerts:
+                auto_agent.push_event(
+                    EventType.THREAT_INTEL_UPDATE.value if alert.in_kev else EventType.NEW_CVE_PUBLISHED.value,
+                    alert.source,
+                    {"cve_id": alert.cve_id, "title": alert.title, "severity": alert.severity,
+                     "cvss": alert.cvss, "in_kev": alert.in_kev, "ransomware": alert.ransomware_use},
+                    priority=1 if alert.in_kev else 2,
+                )
+
+            # Inject scheduled scan event
+            auto_agent.push_event(
+                EventType.SCHEDULED_SCAN.value, "scheduler",
+                {"scope": "fleet", "servers": len(_srvs)}, priority=5,
+            )
+
+            with st.spinner("Agent reasoning and taking actions..."):
+                cycle_actions = auto_agent.run_cycle(servers=_srvs, server_state_str=_state_str)
+
+            st.success(f"Cycle #{auto_agent.cycle_count} complete: {len(cycle_actions)} actions taken")
+
+            st.session_state["agent_log"].append({
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "action": f"Brain cycle #{auto_agent.cycle_count}: {len(cycle_actions)} actions, {len(alerts)} threats detected",
+            })
+
+        # Display recent actions
+        recent = auto_agent.get_recent_actions(20)
+        if recent:
+            act_rows = []
+            for a in recent:
+                p_icon = {"P1": "🔴", "P2": "🟠", "P3": "🟡", "P4": "🔵"}.get(a.get("priority", "P3"), "⚪")
+                act_rows.append({
+                    "Time": a.get("timestamp", "")[:19],
+                    "Priority": f"{p_icon} {a.get('priority', 'P3')}",
+                    "Action": a.get("action_type", ""),
+                    "Target": a.get("target", ""),
+                    "Details": a.get("details", "")[:80],
+                    "Status": a.get("status", ""),
+                })
+            st.dataframe(pd.DataFrame(act_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No actions yet. Click 'Run Agent Cycle' to start.")
+
+    with brain_col2:
+        st.markdown("#### Threat Feed")
+
+        # Show alerts from watcher
+        watcher_alerts = st.session_state.get("_watcher_alerts", [])
+        if not watcher_alerts:
+            watcher = WatcherAgent()
+            watcher_alerts = watcher._simulate_new_cves()
+
+        for alert in watcher_alerts[:5]:
+            sev_icon = "🔴" if alert.severity == "CRITICAL" else "🟠"
+            kev_badge = " 🏴 KEV" if alert.in_kev else ""
+            ransom_badge = " 💀 Ransomware" if alert.ransomware_use == "Known" else ""
+            st.markdown(f"{sev_icon} **{alert.cve_id}**{kev_badge}{ransom_badge}")
+            st.caption(f"{alert.title[:100]}")
+
+    st.divider()
+
+    # ---- Policies ----
+    st.markdown("#### 📜 Natural Language Policies")
+    st.caption("The agent follows these rules when making autonomous decisions. Policies are written in plain English.")
+
+    policies = auto_agent.policy_engine.policies
+    for p in policies:
+        with st.expander(f"**{p.policy_id}** — {p.name}", expanded=False):
+            st.markdown(f"**Rule:** {p.description}")
+            st.markdown(f"**Scope:** `{p.scope}` | **Priority:** {p.priority} | **Created by:** {p.created_by}")
+
+    # Add new policy
+    with st.expander("➕ Add New Policy", expanded=False):
+        new_name = st.text_input("Policy Name", key="new_pol_name")
+        new_desc = st.text_area("Rule (natural language)", key="new_pol_desc", height=80,
+                                placeholder="e.g., Never auto-patch the SQL Server during business hours")
+        new_scope = st.text_input("Scope", value="global", key="new_pol_scope")
+        if st.button("Add Policy", key="add_pol") and new_name and new_desc:
+            auto_agent.policy_engine.add_policy(new_name, new_desc, new_scope, created_by=user.get("username", "admin"))
+            st.success(f"Policy added: {new_name}")
+            st.rerun()
+
+    st.divider()
+
+    # ---- Agent Memory ----
+    st.markdown("#### 🧠 Agent Memory")
+    mem_stats = auto_agent.memory.stats()
+    st.markdown(f"**{mem_stats['total_memories']} memories** across {len(mem_stats.get('categories', {}))} categories")
+
+    memories = auto_agent.memory.to_dict()
+    if memories:
+        mem_rows = [{
+            "Category": m["category"],
+            "Key": m["key"][:50],
+            "Value": m["value"][:80],
+            "Confidence": f"{m['confidence']:.0%}",
+            "Accessed": m["access_count"],
+        } for m in memories[:30]]
+        st.dataframe(pd.DataFrame(mem_rows), use_container_width=True, hide_index=True)
+
+    # ---- SSM Patch Manager ----
+    st.divider()
+    st.markdown("#### 🩹 SSM Patch Manager")
+
+    pm = SSMPatchManager()
+    baselines = pm.get_patch_baselines()
+    if baselines:
+        bl_rows = [{"Name": b["name"], "ID": b["baseline_id"], "OS": b.get("os", "WINDOWS"), "Default": b.get("default", False)} for b in baselines]
+        st.dataframe(pd.DataFrame(bl_rows), use_container_width=True, hide_index=True)
+
+    pm_col1, pm_col2 = st.columns(2)
+    with pm_col1:
+        if st.button("🔍 Scan Compliance (Patch Manager)", use_container_width=True, key="pm_scan"):
+            online_ids = [s.instance_id for s in get_servers() if s.ssm_status == "Online"]
+            if online_ids:
+                result = pm.scan_compliance(online_ids)
+                st.success(f"Scan initiated: {result.get('status')} on {len(online_ids)} servers")
+            else:
+                st.warning("No SSM-connected servers available")
+
+    with pm_col2:
+        if st.button("🩹 Install Patches (Patch Manager)", use_container_width=True, key="pm_install"):
+            online_ids = [s.instance_id for s in get_servers() if s.ssm_status == "Online"]
+            if online_ids:
+                result = pm.install_patches(online_ids)
+                st.success(f"Install initiated: {result.get('status')} on {len(online_ids)} servers")
+            else:
+                st.warning("No SSM-connected servers available")
+
+    # Missing patches for online servers
+    st.markdown("##### Missing Patches (from SSM Patch Baseline)")
+    for srv in get_servers():
+        if srv.ssm_status == "Online":
+            with st.expander(f"🖥️ {srv.hostname} ({srv.instance_id})", expanded=False):
+                missing = pm.get_missing_patches(srv.instance_id)
+                if missing:
+                    mp_rows = [{"Title": p["title"], "KB": p["kb"], "Severity": p["severity"], "CVEs": p.get("cve_ids", "")} for p in missing]
+                    st.dataframe(pd.DataFrame(mp_rows), use_container_width=True, hide_index=True)
+                else:
+                    st.success("Fully patched!")
+
+
+# ==================== TAB: AI CHAT ====================
 with tab_agent:
     st.markdown("#### 🤖 Enterprise AI Security Agent")
     _provider_labels = {
