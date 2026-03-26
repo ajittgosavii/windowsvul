@@ -2206,8 +2206,9 @@ with tab_itsm:
 
     chg_to_check = st.text_input("CHG Ticket Number", value="CHG0030042", key="chg_check_number")
     if st.button("🔄 Check Approval Status", key="check_approval"):
-        if snow:
-            chg_data = snow.get_change_with_approvals(chg_to_check)
+        _snow_check = create_servicenow_client(snow_url, snow_user, snow_pass) if snow_pass else (st.session_state.get("snow_client") or create_servicenow_client(snow_url, snow_user, ""))
+        if _snow_check:
+            chg_data = _snow_check.get_change_with_approvals(chg_to_check)
             if chg_data and not chg_data.get("error"):
                 st.markdown(f"**{chg_to_check}:** {chg_data.get('short_description', 'N/A')}")
                 st.markdown(f"**State:** {chg_data.get('state', 'N/A')}")
