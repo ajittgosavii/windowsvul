@@ -138,19 +138,28 @@ def render_login_page():
             100% { opacity: 1; }
         }
 
-        /* GLASS CARD FRAME */
+        /* GLASS CARD — logo/branding area */
         .login-card {
-            background: rgba(13, 27, 42, 0.85);
-            border: 1px solid rgba(59, 130, 246, 0.15);
-            border-radius: 28px;
-            padding: 3rem 2.5rem 2rem;
-            max-width: 440px;
-            margin: 0 auto;
-            box-shadow:
-                0 30px 80px rgba(0, 0, 0, 0.5),
-                0 0 40px rgba(59, 130, 246, 0.06);
-            position: relative;
-            z-index: 1;
+            max-width: 420px;
+            margin: 5vh auto 0;
+            text-align: center;
+        }
+
+        /* Constrain the Streamlit form + footer to same width */
+        .block-container > div > div > div[data-testid="stVerticalBlockBorderWrapper"],
+        .block-container > div > div > div.element-container {
+            max-width: 420px !important;
+            margin-left: auto !important;
+            margin-right: auto !important;
+        }
+
+        /* Form wrapper — remove ALL backgrounds */
+        [data-testid="stForm"] {
+            border: 1px solid rgba(59, 130, 246, 0.15) !important;
+            border-radius: 16px !important;
+            padding: 1.5rem !important;
+            max-width: 420px !important;
+            margin: 0 auto !important;
         }
 
         /* Animated Shield Logo */
@@ -317,16 +326,9 @@ def render_login_page():
     </style>
     """, unsafe_allow_html=True)
 
-    # Center the login form with spacers
-    st.markdown("<div style='height: 3vh;'></div>", unsafe_allow_html=True)
-
-    col_pad1, col_login, col_pad2 = st.columns([1.2, 1, 1.2])
-
-    with col_login:
-        # Glass card wrapper opens
-        st.markdown('<div class="login-card">', unsafe_allow_html=True)
-
-        st.markdown("""
+    # Logo + branding as pure HTML (no Streamlit containers)
+    st.markdown("""
+        <div class="login-card">
             <div class="logo-container">
                 <div class="shield-logo">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -335,16 +337,9 @@ def render_login_page():
                                 <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
                                 <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
                             </linearGradient>
-                            <filter id="glow">
-                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur"/>
-                                    <feMergeNode in="SourceGraphic"/>
-                                </feMerge>
-                            </filter>
                         </defs>
                         <path d="M50 5 L90 25 L90 50 C90 75 70 92 50 98 C30 92 10 75 10 50 L10 25 Z"
-                              fill="url(#shieldGrad)" opacity="0.9" filter="url(#glow)"/>
+                              fill="url(#shieldGrad)" opacity="0.9"/>
                         <path d="M50 15 L80 30 L80 50 C80 70 65 83 50 88 C35 83 20 70 20 50 L20 30 Z"
                               fill="rgba(10,10,35,0.6)"/>
                         <path d="M42 50 L48 56 L60 40" stroke="white" stroke-width="4" fill="none"
@@ -355,30 +350,32 @@ def render_login_page():
                 <p class="logo-subtitle">Enterprise Security Platform</p>
                 <div class="scan-line"></div>
             </div>
-        """, unsafe_allow_html=True)
+        </div>
+    """, unsafe_allow_html=True)
 
-        # Login form
-        with st.form("login_form", clear_on_submit=False):
-            st.markdown('<p class="login-label">Username</p>', unsafe_allow_html=True)
-            username = st.text_input("Username", label_visibility="collapsed", placeholder="Enter your username")
+    # Login form — Streamlit widgets (these MUST be outside the HTML div)
+    with st.form("login_form", clear_on_submit=False):
+        st.markdown('<p class="login-label">Username</p>', unsafe_allow_html=True)
+        username = st.text_input("Username", label_visibility="collapsed", placeholder="Enter your username")
 
-            st.markdown('<p class="login-label">Password</p>', unsafe_allow_html=True)
-            password = st.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter your password")
+        st.markdown('<p class="login-label">Password</p>', unsafe_allow_html=True)
+        password = st.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter your password")
 
-            submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+        submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
 
-            if submitted:
-                if username in SSO_USERS and SSO_USERS[username]["password"] == password:
-                    st.session_state["authenticated"] = True
-                    st.session_state["user_info"] = {
-                        "username": username,
-                        **{k: v for k, v in SSO_USERS[username].items() if k != "password"},
-                    }
-                    st.rerun()
-                else:
-                    st.error("Invalid credentials. Try: demo / demo")
+        if submitted:
+            if username in SSO_USERS and SSO_USERS[username]["password"] == password:
+                st.session_state["authenticated"] = True
+                st.session_state["user_info"] = {
+                    "username": username,
+                    **{k: v for k, v in SSO_USERS[username].items() if k != "password"},
+                }
+                st.rerun()
+            else:
+                st.error("Invalid credentials. Try: demo / demo")
 
-        st.markdown("""
+    st.markdown("""
+        <div style="text-align:center; margin-top:1rem;">
             <div class="sso-badge"><span>SSO ENTERPRISE AUTH</span></div>
             <div class="agent-badges">
                 <span class="agent-badge">12 AI Agents</span>
@@ -391,7 +388,7 @@ def render_login_page():
                 Powered by Claude AI &bull; Multi-Account AWS &bull; ServiceNow ITSM
             </div>
         </div>
-        """, unsafe_allow_html=True)  # closes login-card div
+    """, unsafe_allow_html=True)
 
 # Check authentication
 if not st.session_state["authenticated"]:
