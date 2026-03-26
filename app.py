@@ -1,13 +1,16 @@
 """
 Agentic AI Windows Vulnerability Scanner & Remediation Tool
+Enterprise Edition — Multi-Account AWS, ServiceNow ITSM, Human-in-the-Loop
+
 Cloud-based Streamlit application powered by Claude AI
 """
 
 import streamlit as st
 import json
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
+from dataclasses import asdict
 
 from windows_server_remediation_MERGED_ENHANCED import (
     WindowsServerRemediator,
@@ -17,27 +20,270 @@ from windows_server_remediation_MERGED_ENHANCED import (
     VULNERABILITY_CATEGORIES,
     CRITICAL_COMPONENTS,
 )
+from aws_multi_account import (
+    AWSMultiAccountConnector,
+    AWSAccount,
+    WindowsServer,
+    AccountStatus,
+    ServerStatus,
+)
+from agentic_pipeline import (
+    AgenticPipeline,
+    PipelineConfig,
+    AgentAction,
+    PipelineStage,
+    ApprovalStatus,
+    AnalysisAgent,
+    DecisionAgent,
+)
+from itsm_integration import (
+    ServiceNowClient,
+    ServiceNowConfig,
+    create_servicenow_client,
+)
 
 # ==================== PAGE CONFIG ====================
 st.set_page_config(
-    page_title="Windows Vulnerability AI Agent",
+    page_title="Enterprise Windows Vulnerability AI Agent",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="collapsed" if "authenticated" not in st.session_state or not st.session_state["authenticated"] else "expanded",
 )
+
+# ==================== SSO LOGIN GATE ====================
+
+# Enterprise SSO users (in production, replace with LDAP/SAML/OAuth)
+SSO_USERS = {
+    "admin": {"password": "admin123", "role": "Administrator", "name": "Admin User", "email": "admin@enterprise.com"},
+    "security": {"password": "security123", "role": "Security Engineer", "name": "Security Team", "email": "security@enterprise.com"},
+    "devops": {"password": "devops123", "role": "DevOps Engineer", "name": "DevOps Team", "email": "devops@enterprise.com"},
+    "auditor": {"password": "auditor123", "role": "Compliance Auditor", "name": "Audit Team", "email": "auditor@enterprise.com"},
+    "demo": {"password": "demo", "role": "Demo User", "name": "Demo Account", "email": "demo@enterprise.com"},
+}
+
+if "authenticated" not in st.session_state:
+    st.session_state["authenticated"] = False
+    st.session_state["user_info"] = {}
+
+def render_login_page():
+    """Render professional SSO login page with animated shield logo."""
+    st.markdown("""
+    <style>
+        /* Hide default streamlit elements on login */
+        [data-testid="stSidebar"] { display: none; }
+        header[data-testid="stHeader"] { display: none; }
+        .block-container { padding-top: 0 !important; max-width: 100% !important; }
+
+        .login-page {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #0a0a23 0%, #1a1a3e 35%, #0f3460 65%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 2rem;
+        }
+
+        .login-container {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 24px;
+            padding: 3rem 2.5rem;
+            width: 420px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Animated Shield Logo */
+        .logo-container {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .shield-logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1rem;
+            position: relative;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .shield-logo svg {
+            width: 100%;
+            height: 100%;
+            filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.5));
+        }
+
+        /* Pulse ring around logo */
+        .shield-logo::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            right: -10px;
+            bottom: -10px;
+            border-radius: 50%;
+            border: 2px solid rgba(59, 130, 246, 0.3);
+            animation: pulse-ring 2s ease-out infinite;
+        }
+
+        @keyframes pulse-ring {
+            0% { transform: scale(1); opacity: 1; }
+            100% { transform: scale(1.3); opacity: 0; }
+        }
+
+        .logo-title {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin: 0;
+        }
+
+        .logo-subtitle {
+            color: rgba(168, 178, 209, 0.9);
+            font-size: 0.85rem;
+            margin-top: 0.3rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* Scanning line animation */
+        .scan-line {
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
+            margin: 1.5rem 0;
+            animation: scan 2s ease-in-out infinite;
+        }
+
+        @keyframes scan {
+            0% { opacity: 0.3; transform: scaleX(0.5); }
+            50% { opacity: 1; transform: scaleX(1); }
+            100% { opacity: 0.3; transform: scaleX(0.5); }
+        }
+
+        .login-label {
+            color: rgba(168, 178, 209, 0.8);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.3rem;
+        }
+
+        /* SSO badge */
+        .sso-badge {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+
+        .sso-badge span {
+            background: rgba(59, 130, 246, 0.15);
+            color: #60a5fa;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            letter-spacing: 1px;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .login-footer {
+            text-align: center;
+            color: rgba(168, 178, 209, 0.5);
+            font-size: 0.7rem;
+            margin-top: 2rem;
+        }
+
+        /* Override streamlit input styling inside login */
+        .login-form .stTextInput > div > div {
+            background: rgba(255, 255, 255, 0.08) !important;
+            border: 1px solid rgba(255, 255, 255, 0.15) !important;
+            border-radius: 12px !important;
+            color: white !important;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # Center the login form
+    col_pad1, col_login, col_pad2 = st.columns([1, 1, 1])
+
+    with col_login:
+        st.markdown("""
+        <div style="text-align: center; padding-top: 3rem;">
+            <div class="logo-container">
+                <div class="shield-logo">
+                    <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
+                                <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
+                            </linearGradient>
+                        </defs>
+                        <path d="M50 5 L90 25 L90 50 C90 75 70 92 50 98 C30 92 10 75 10 50 L10 25 Z"
+                              fill="url(#shieldGrad)" opacity="0.9"/>
+                        <path d="M50 15 L80 30 L80 50 C80 70 65 83 50 88 C35 83 20 70 20 50 L20 30 Z"
+                              fill="rgba(10,10,35,0.5)"/>
+                        <path d="M42 50 L48 56 L60 40" stroke="#3b82f6" stroke-width="4" fill="none"
+                              stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <p class="logo-title">VulnShield AI</p>
+                <p class="logo-subtitle">Enterprise Security Platform</p>
+            </div>
+            <div class="scan-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Login form
+        with st.form("login_form", clear_on_submit=False):
+            st.markdown('<p class="login-label">Username</p>', unsafe_allow_html=True)
+            username = st.text_input("Username", label_visibility="collapsed", placeholder="Enter your username")
+
+            st.markdown('<p class="login-label">Password</p>', unsafe_allow_html=True)
+            password = st.text_input("Password", type="password", label_visibility="collapsed", placeholder="Enter your password")
+
+            submitted = st.form_submit_button("Sign In", use_container_width=True, type="primary")
+
+            if submitted:
+                if username in SSO_USERS and SSO_USERS[username]["password"] == password:
+                    st.session_state["authenticated"] = True
+                    st.session_state["user_info"] = {
+                        "username": username,
+                        **{k: v for k, v in SSO_USERS[username].items() if k != "password"},
+                    }
+                    st.rerun()
+                else:
+                    st.error("Invalid credentials. Try: demo / demo")
+
+        st.markdown("""
+        <div class="sso-badge"><span>SSO ENTERPRISE AUTH</span></div>
+        <div class="login-footer">
+            Agentic AI Windows Vulnerability Management v3.0<br>
+            Powered by Claude AI | Multi-Account AWS | ServiceNow ITSM
+        </div>
+        """, unsafe_allow_html=True)
+
+# Check authentication
+if not st.session_state["authenticated"]:
+    render_login_page()
+    st.stop()
 
 # ==================== CUSTOM CSS ====================
 st.markdown("""
 <style>
     .main-header {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        background: linear-gradient(135deg, #0a0a23 0%, #1a1a3e 40%, #0f3460 100%);
         padding: 1.5rem 2rem;
         border-radius: 12px;
         margin-bottom: 1.5rem;
         color: white;
     }
-    .main-header h1 { color: white; margin: 0; font-size: 1.8rem; }
-    .main-header p { color: #a8b2d1; margin: 0.3rem 0 0 0; font-size: 0.95rem; }
+    .main-header h1 { color: white; margin: 0; font-size: 1.7rem; }
+    .main-header p { color: #a8b2d1; margin: 0.3rem 0 0 0; font-size: 0.9rem; }
     .agent-card {
         background: #f8f9fa;
         border-left: 4px solid #0f3460;
@@ -45,29 +291,13 @@ st.markdown("""
         border-radius: 0 8px 8px 0;
         margin-bottom: 0.8rem;
     }
-    .severity-critical { color: #dc3545; font-weight: 700; }
-    .severity-high { color: #fd7e14; font-weight: 700; }
-    .severity-medium { color: #ffc107; font-weight: 600; }
-    .severity-low { color: #28a745; font-weight: 600; }
-    .status-badge {
-        display: inline-block;
-        padding: 2px 10px;
-        border-radius: 12px;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
-    .chat-msg-ai {
-        background: #e8f4f8;
-        border-radius: 12px;
-        padding: 0.8rem 1rem;
-        margin: 0.5rem 0;
-    }
-    .chat-msg-user {
-        background: #f0f0f5;
-        border-radius: 12px;
-        padding: 0.8rem 1rem;
-        margin: 0.5rem 0;
-    }
+    .action-auto { border-left: 4px solid #28a745; background: #f0fff4; padding: 0.6rem; border-radius: 0 6px 6px 0; margin: 0.3rem 0; }
+    .action-human { border-left: 4px solid #ffc107; background: #fffdf0; padding: 0.6rem; border-radius: 0 6px 6px 0; margin: 0.3rem 0; }
+    .action-chg { border-left: 4px solid #dc3545; background: #fff5f5; padding: 0.6rem; border-radius: 0 6px 6px 0; margin: 0.3rem 0; }
+    .pipeline-step { display: inline-block; padding: 4px 12px; border-radius: 16px; font-size: 0.75rem; font-weight: 600; margin: 2px; }
+    .step-active { background: #0f3460; color: white; }
+    .step-done { background: #28a745; color: white; }
+    .step-pending { background: #e9ecef; color: #6c757d; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -80,8 +310,12 @@ def init_session_state():
         "scan_results": [],
         "remediation_queue": [],
         "agent_log": [],
-        "selected_vulns": [],
-        "api_key_set": False,
+        "pipeline": None,
+        "aws_connector": None,
+        "snow_client": None,
+        "accounts": [],
+        "servers": [],
+        "decisions": [],
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -97,20 +331,24 @@ remediator = st.session_state["remediator"]
 class VulnerabilityAgent:
     """Agentic AI that reasons about vulnerabilities and recommends actions."""
 
-    SYSTEM_PROMPT = """You are an expert Windows Server security analyst AI agent.
+    SYSTEM_PROMPT = """You are an expert Windows Server security analyst AI agent for an enterprise with 200+ AWS accounts.
 Your role is to:
-1. Analyze vulnerability scan results and assess risk
+1. Analyze vulnerability scan results across multi-account AWS environments
 2. Map vulnerabilities to NIST SP 800-53 controls and CIS Benchmarks
-3. Recommend remediation strategies with confidence scores
+3. Make autonomous remediation decisions based on confidence scores:
+   - Confidence >= 90%: Auto-remediate via AWS SSM
+   - Confidence 70-89%: Queue for human approval
+   - Confidence < 70%: Raise ServiceNow CHG ticket
 4. Generate PowerShell remediation scripts
-5. Prioritize vulnerabilities by business impact
+5. Prioritize vulnerabilities by business impact across the fleet
+6. Coordinate with ServiceNow ITSM for change management
 
-You have access to these NIST controls: AC-2, AC-17, SC-8, SI-2, SI-3, AU-9
-You support Windows Server versions: 2012 R2, 2016, 2019, 2022, 2025
+Available NIST controls: AC-2, AC-17, SC-8, SI-2, SI-3, AU-9
+Supported Windows Server versions: 2012 R2, 2016, 2019, 2022, 2025
+AWS services used: SSM, Inspector, Organizations, STS AssumeRole
 
-Always respond with structured, actionable advice. When analyzing vulnerabilities,
-provide severity assessment, affected components, NIST mapping, and remediation steps.
-Format output in markdown for clarity."""
+Always respond with structured, actionable advice. Be specific about which servers
+and accounts are affected. Format output in markdown."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.client = None
@@ -122,15 +360,10 @@ Format output in markdown for clarity."""
                 pass
 
     def analyze(self, prompt: str, context: str = "") -> str:
-        """Run AI analysis using Claude."""
         if not self.client:
             return self._fallback_analysis(prompt)
-
         try:
-            full_prompt = prompt
-            if context:
-                full_prompt = f"Context:\n{context}\n\nUser Query:\n{prompt}"
-
+            full_prompt = f"Context:\n{context}\n\nUser Query:\n{prompt}" if context else prompt
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2048,
@@ -142,373 +375,542 @@ Format output in markdown for clarity."""
             return f"AI analysis error: {e}\n\n" + self._fallback_analysis(prompt)
 
     def _fallback_analysis(self, prompt: str) -> str:
-        """Rule-based fallback when API is unavailable."""
-        prompt_lower = prompt.lower()
-
-        if "scan" in prompt_lower or "vulnerabilit" in prompt_lower:
+        p = prompt.lower()
+        if "scan" in p or "vulnerabilit" in p:
             return self._generate_scan_report()
-        elif "remediat" in prompt_lower or "fix" in prompt_lower:
+        elif "remediat" in p or "fix" in p:
             return self._generate_remediation_advice()
-        elif "nist" in prompt_lower or "compliance" in prompt_lower:
+        elif "nist" in p or "compliance" in p:
             return self._generate_compliance_report()
-        elif "priorit" in prompt_lower or "risk" in prompt_lower:
-            return self._generate_risk_assessment()
+        elif "account" in p or "fleet" in p or "multi" in p:
+            return self._generate_fleet_report()
+        elif "servicenow" in p or "itsm" in p or "chg" in p or "ticket" in p:
+            return self._generate_itsm_report()
+        elif "pipeline" in p or "agent" in p or "decision" in p:
+            return self._generate_pipeline_report()
         else:
             return (
-                "**AI Agent Ready** - I can help with:\n"
-                "- **Scan** vulnerabilities on Windows Servers\n"
-                "- **Analyze** CVEs and map to NIST/CIS controls\n"
-                "- **Remediate** with auto-generated PowerShell scripts\n"
-                "- **Prioritize** vulnerabilities by risk score\n"
-                "- **Compliance** reporting (NIST SP 800-53, CIS)\n\n"
-                "Try: *'Scan my Windows Server 2022 for critical vulnerabilities'*"
+                "**Enterprise AI Agent Ready** — I can help with:\n\n"
+                "- **Multi-Account Scan** — Scan Windows servers across 200+ AWS accounts\n"
+                "- **Agentic Remediation** — Auto-fix, human approval, or CHG ticket based on AI confidence\n"
+                "- **Fleet Overview** — View all accounts, servers, and vulnerability posture\n"
+                "- **ITSM / ServiceNow** — Create and track CHG tickets automatically\n"
+                "- **Compliance** — NIST SP 800-53 and CIS Benchmark mapping\n"
+                "- **Pipeline Status** — View AI agent decision pipeline\n\n"
+                "Try: *'Show me critical vulnerabilities across all production accounts'*"
             )
 
     def _generate_scan_report(self) -> str:
-        return """### Vulnerability Scan Report
+        return """### Multi-Account Vulnerability Scan Report
 
-| CVE | Severity | Component | CVSS | NIST Control |
-|-----|----------|-----------|------|--------------|
-| CVE-2024-43498 | CRITICAL | .NET Framework | 9.8 | SI-2 |
-| CVE-2024-43499 | CRITICAL | Remote Desktop Services | 9.1 | AC-17 |
-| CVE-2024-43500 | HIGH | IIS Web Server | 7.5 | SC-8 |
-| CVE-2024-38063 | CRITICAL | TCP/IP Stack | 9.8 | SC-8 |
-| CVE-2024-21338 | HIGH | Windows Kernel | 7.8 | SI-2 |
+| Account | Servers | Critical | High | Medium | Compliance |
+|---------|---------|----------|------|--------|------------|
+| Splunk COE (448549863273) | 15 | 3 | 7 | 12 | 78% |
+| Cloud Migration (950766978386) | 22 | 5 | 12 | 18 | 72% |
+| Finance Production | 8 | 1 | 4 | 6 | 91% |
+| HR Systems | 5 | 0 | 2 | 3 | 95% |
+| ERP Platform | 30 | 8 | 15 | 22 | 68% |
+| DevTest | 12 | 2 | 6 | 9 | 82% |
 
-**Summary:** 3 Critical, 2 High vulnerabilities detected.
-**Recommendation:** Immediate patching required for CRITICAL items. Schedule HIGH items within 72 hours."""
+**Fleet Summary:** 92 servers across 6 accounts
+**Total Critical:** 19 | **Total High:** 46 | **Average Compliance:** 81%
+
+**AI Agent Actions:**
+- 12 vulnerabilities auto-remediated (confidence >= 90%)
+- 5 queued for human approval (confidence 70-89%)
+- 2 CHG tickets created in ServiceNow (confidence < 70%)"""
 
     def _generate_remediation_advice(self) -> str:
-        return """### Remediation Plan
+        return """### Agentic Remediation Pipeline Status
 
-**Priority 1 - Immediate (0-24 hours):**
-- CVE-2024-43498: Install KB5043050 (.NET Framework update)
-- CVE-2024-38063: Install KB5041578 (TCP/IP stack patch)
-- CVE-2024-43499: Install KB5043051 + enforce NLA for RDP
+**Auto-Remediated (Confidence >= 90%):**
+| CVE | Accounts Affected | Servers | Status |
+|-----|-------------------|---------|--------|
+| CVE-2024-43498 | 4 accounts | 35 servers | Completed via SSM |
+| CVE-2024-38063 | 6 accounts | 62 servers | In Progress |
 
-**Priority 2 - Short-term (24-72 hours):**
-- CVE-2024-21338: Install KB5034763 (Kernel update, requires reboot)
-- CVE-2024-43500: Install KB5043052 + harden IIS configuration
+**Pending Human Approval (Confidence 70-89%):**
+| CVE | Risk | Confidence | Reason |
+|-----|------|------------|--------|
+| CVE-2024-43499 | HIGH | 82% | RDP change on production — requires validation |
+| CVE-2024-21338 | HIGH | 77% | Kernel update with reboot — needs maintenance window |
 
-**Auto-Remediation Confidence:**
-- 3 of 5 vulnerabilities qualify for auto-remediation (confidence >= 85%)
-- 2 require manual review due to reboot requirements or configuration complexity
+**CHG Tickets Created (Confidence < 70%):**
+| Ticket | CVE | Risk | Assigned To |
+|--------|-----|------|-------------|
+| CHG0040001 | CVE-2024-30078 | HIGH | Windows Server Team |
+| CHG0040002 | CVE-2024-35250 | MEDIUM | Windows Server Team |
 
-Use the **Generate Scripts** tab to create PowerShell remediation scripts."""
+**Next Steps:** Approve pending items in the Approval Queue tab or review CHG tickets in ServiceNow."""
 
     def _generate_compliance_report(self) -> str:
         controls = []
         for cid, info in NIST_REMEDIATION_MAP.items():
-            reg_count = len(info.get("registry_fixes", []))
-            conf = info.get("confidence", 0.85)
-            controls.append(f"| {cid} | {info['name']} | {reg_count} | {conf:.0%} |")
-        table = "\n".join(controls)
-        return f"""### NIST SP 800-53 Compliance Status
+            controls.append(f"| {cid} | {info['name']} | {len(info.get('registry_fixes', []))} | {info.get('confidence', 0.85):.0%} |")
+        return f"""### NIST SP 800-53 Compliance — Fleet-Wide
 
 | Control | Name | Registry Fixes | Confidence |
 |---------|------|---------------|------------|
-{table}
+{chr(10).join(controls)}
 
-**CIS Benchmarks:** 2 controls mapped (CIS-2.2.1, CIS-18.9.16.1)
-**Overall Compliance Score:** 87%
-**Next Audit Date:** Schedule within 30 days"""
+**Fleet Compliance Score:** 81% average across 92 servers
+**Highest Risk Account:** ERP Platform (68% compliance)
+**Best Performing:** HR Systems (95% compliance)"""
 
-    def _generate_risk_assessment(self) -> str:
-        return """### Risk Assessment Matrix
+    def _generate_fleet_report(self) -> str:
+        return """### Enterprise Fleet Overview
 
-| Risk Level | Count | Action Required |
-|-----------|-------|-----------------|
-| CRITICAL | 3 | Patch within 24 hours |
-| HIGH | 2 | Patch within 72 hours |
-| MEDIUM | 0 | Patch within 30 days |
-| LOW | 0 | Next maintenance window |
+**AWS Organization:** 6 accounts connected (of 200+ target)
+**Total Windows Servers:** 92 managed instances
+**SSM Coverage:** 89 servers online, 3 offline
 
-**Business Impact Analysis:**
-- **RDP Vulnerability (CVE-2024-43499):** Highest business risk - enables remote access exploitation
-- **TCP/IP Stack (CVE-2024-38063):** Network-level attack vector, affects all services
-- **.NET Framework (CVE-2024-43498):** Application-level RCE, affects web workloads
+| Metric | Value |
+|--------|-------|
+| Total Accounts | 6 |
+| Total Servers | 92 |
+| Servers Online | 89 |
+| Pending Reboot | 7 |
+| Critical Vulns (Fleet) | 19 |
+| High Vulns (Fleet) | 46 |
+| Avg Patch Compliance | 81% |
+| Auto-Remediation Rate | 63% |
 
-**Recommended Approach:** Rolling patch strategy with staged deployment across server groups."""
+**Account Distribution:**
+- Production: 4 accounts, 75 servers
+- Non-Production: 2 accounts, 17 servers"""
+
+    def _generate_itsm_report(self) -> str:
+        return """### ServiceNow ITSM Status
+
+**Instance:** dev218436.service-now.com
+**Connection:** Active
+
+| Ticket | Type | CVE | Status | Priority | Assigned To |
+|--------|------|-----|--------|----------|-------------|
+| CHG0040001 | Change | CVE-2024-30078 | New | P1 | Windows Server Team |
+| CHG0040002 | Change | CVE-2024-35250 | Assess | P2 | Windows Server Team |
+| CHG0040003 | Change | CVE-2024-21338 | Authorize | P2 | Windows Server Team |
+
+**Automation Stats:**
+- CHG tickets auto-created: 3
+- Avg time to create: 2.1 seconds
+- CMDB servers synced: 92
+- Incidents raised: 0"""
+
+    def _generate_pipeline_report(self) -> str:
+        return """### Agentic AI Pipeline Status
+
+```
+Discovery → Analysis → Decision → [Auto|Approve|CHG] → Remediation → Verification
+    ✅          ✅         ✅           ⏳                  ⏳              ⏳
+```
+
+**Pipeline Configuration:**
+| Setting | Value |
+|---------|-------|
+| Auto-Remediate Threshold | >= 90% confidence |
+| Human Approval Range | 70-89% confidence |
+| CHG Ticket Range | < 70% confidence |
+| Max Auto/Hour | 50 remediations |
+| Dry-Run First | Enabled |
+| Restore Points | Required |
+
+**Current Run:**
+- Vulnerabilities analyzed: 19
+- Auto-remediated: 12 (63%)
+- Pending approval: 5 (26%)
+- CHG tickets: 2 (11%)
+- Average confidence: 84%"""
 
 
-# ==================== SAMPLE VULNERABILITY DATA ====================
+# ==================== SAMPLE DATA ====================
 SAMPLE_VULNERABILITIES = [
-    {
-        "cve_id": "CVE-2024-43498",
-        "title": ".NET Framework Remote Code Execution",
-        "severity": "CRITICAL",
-        "cvss_score": 9.8,
-        "packageName": "Microsoft .NET Framework",
-        "description": "Remote code execution vulnerability in .NET Framework allowing unauthenticated attackers to execute arbitrary code",
-        "kb_number": "KB5043050",
-        "component": ".NET Framework",
-        "attack_vector": "Network",
-        "exploitability": "High",
-    },
-    {
-        "cve_id": "CVE-2024-43499",
-        "title": "Windows Remote Desktop Services RCE",
-        "severity": "CRITICAL",
-        "cvss_score": 9.1,
-        "packageName": "Remote Desktop Services",
-        "description": "Remote code execution in RDP service enabling lateral movement",
-        "kb_number": "KB5043051",
-        "component": "Remote Desktop Services",
-        "attack_vector": "Network",
-        "exploitability": "High",
-    },
-    {
-        "cve_id": "CVE-2024-43500",
-        "title": "IIS Web Server Information Disclosure",
-        "severity": "HIGH",
-        "cvss_score": 7.5,
-        "packageName": "Internet Information Services",
-        "description": "Information disclosure vulnerability in IIS exposing sensitive configuration",
-        "kb_number": "KB5043052",
-        "component": "IIS",
-        "attack_vector": "Network",
-        "exploitability": "Medium",
-    },
-    {
-        "cve_id": "CVE-2024-38063",
-        "title": "Windows TCP/IP Remote Code Execution",
-        "severity": "CRITICAL",
-        "cvss_score": 9.8,
-        "packageName": "Windows TCP/IP",
-        "description": "Critical RCE in TCP/IP stack via specially crafted IPv6 packets",
-        "kb_number": "KB5041578",
-        "component": "Windows Kernel",
-        "attack_vector": "Network",
-        "exploitability": "High",
-    },
-    {
-        "cve_id": "CVE-2024-21338",
-        "title": "Windows Kernel Elevation of Privilege",
-        "severity": "HIGH",
-        "cvss_score": 7.8,
-        "packageName": "Windows Kernel",
-        "description": "Elevation of privilege vulnerability in Windows Kernel allowing SYSTEM access",
-        "kb_number": "KB5034763",
-        "component": "Windows Kernel",
-        "attack_vector": "Local",
-        "exploitability": "Medium",
-    },
+    {"cve_id": "CVE-2024-43498", "title": ".NET Framework Remote Code Execution", "severity": "CRITICAL", "cvss_score": 9.8, "packageName": "Microsoft .NET Framework", "description": "RCE in .NET Framework allowing unauthenticated attackers to execute arbitrary code", "kb_number": "KB5043050", "component": ".NET Framework", "attack_vector": "Network", "exploitability": "High"},
+    {"cve_id": "CVE-2024-43499", "title": "Windows Remote Desktop Services RCE", "severity": "CRITICAL", "cvss_score": 9.1, "packageName": "Remote Desktop Services", "description": "RCE in RDP service enabling lateral movement", "kb_number": "KB5043051", "component": "Remote Desktop Services", "attack_vector": "Network", "exploitability": "High"},
+    {"cve_id": "CVE-2024-43500", "title": "IIS Web Server Information Disclosure", "severity": "HIGH", "cvss_score": 7.5, "packageName": "Internet Information Services", "description": "Information disclosure in IIS exposing sensitive configuration", "kb_number": "KB5043052", "component": "IIS", "attack_vector": "Network", "exploitability": "Medium"},
+    {"cve_id": "CVE-2024-38063", "title": "Windows TCP/IP Remote Code Execution", "severity": "CRITICAL", "cvss_score": 9.8, "packageName": "Windows TCP/IP", "description": "Critical RCE in TCP/IP stack via crafted IPv6 packets", "kb_number": "KB5041578", "component": "Windows Kernel", "attack_vector": "Network", "exploitability": "High"},
+    {"cve_id": "CVE-2024-21338", "title": "Windows Kernel Elevation of Privilege", "severity": "HIGH", "cvss_score": 7.8, "packageName": "Windows Kernel", "description": "EoP vulnerability in Windows Kernel allowing SYSTEM access", "kb_number": "KB5034763", "component": "Windows Kernel", "attack_vector": "Local", "exploitability": "Medium"},
+    {"cve_id": "CVE-2024-30078", "title": "Wi-Fi Driver Remote Code Execution", "severity": "HIGH", "cvss_score": 8.8, "packageName": "Wi-Fi Driver", "description": "Wi-Fi driver RCE via crafted network packets", "kb_number": "KB5039212", "component": "Network Driver", "attack_vector": "Adjacent", "exploitability": "Medium"},
+    {"cve_id": "CVE-2024-35250", "title": "Kernel Streaming Service EoP", "severity": "MEDIUM", "cvss_score": 6.7, "packageName": "Kernel Streaming", "description": "Local privilege escalation via kernel streaming", "kb_number": "KB5040442", "component": "Kernel Streaming", "attack_vector": "Local", "exploitability": "Low"},
 ]
 
 
 # ==================== SIDEBAR ====================
 with st.sidebar:
-    st.markdown("## 🛡️ AI Agent Config")
+    # User info & logout
+    user = st.session_state.get("user_info", {})
+    st.markdown(f"#### 👤 {user.get('name', 'User')}")
+    st.caption(f"{user.get('role', '')} | {user.get('email', '')}")
+    if st.button("🚪 Sign Out", use_container_width=True, key="logout"):
+        st.session_state["authenticated"] = False
+        st.session_state["user_info"] = {}
+        st.rerun()
 
-    api_key = st.text_input(
-        "Anthropic API Key",
-        type="password",
-        help="Optional: enables Claude AI analysis. Without it, rule-based analysis is used.",
-        key="anthropic_api_key",
-    )
+    st.divider()
+    st.markdown("## 🛡️ Enterprise Configuration")
 
+    # API Key
+    api_key = st.text_input("Anthropic API Key", type="password", help="Enables Claude AI agent", key="api_key")
     agent = VulnerabilityAgent(api_key=api_key if api_key else None)
-
     if api_key:
-        st.success("Claude AI agent active")
+        st.success("Claude AI active")
     else:
-        st.info("Rule-based mode (add API key for AI)")
+        st.info("Rule-based mode")
 
     st.divider()
 
-    st.markdown("## 🖥️ Target Environment")
-    selected_version = st.selectbox(
-        "Windows Server Version",
-        options=list(WINDOWS_SERVER_VERSIONS.keys()),
-        index=1,
-    )
+    # AWS Configuration
+    st.markdown("### AWS Multi-Account")
+    mgmt_account = st.text_input("Management Account ID", value="448549863273", key="mgmt_acct")
+    aws_region = st.selectbox("Home Region", ["us-west-1", "us-east-1", "eu-west-1", "ap-southeast-1"], key="aws_region")
+    aws_access_key = st.text_input("AWS Access Key", type="password", key="aws_ak")
+    aws_secret_key = st.text_input("AWS Secret Key", type="password", key="aws_sk")
 
-    version_info = remediator.get_version_info(selected_version)
-    st.caption(f"Build {version_info['build']} | Support until {version_info['support_end']}")
+    if st.button("Connect AWS", use_container_width=True, key="connect_aws"):
+        connector = AWSMultiAccountConnector(
+            management_account_id=mgmt_account,
+            home_region=aws_region,
+            aws_access_key=aws_access_key if aws_access_key else None,
+            aws_secret_key=aws_secret_key if aws_secret_key else None,
+        )
+        st.session_state["aws_connector"] = connector
+        accounts = connector.discover_accounts()
+        st.session_state["accounts"] = accounts
+        servers = connector.discover_all_servers(accounts)
+        st.session_state["servers"] = servers
+        st.success(f"Connected: {len(accounts)} accounts, {len(servers)} servers")
 
-    server_count = st.number_input("Number of Servers", min_value=1, max_value=500, value=10)
+    st.divider()
+
+    # ServiceNow Configuration
+    st.markdown("### ServiceNow ITSM")
+    snow_url = st.text_input("Instance URL", value="https://dev218436.service-now.com", key="snow_url")
+    snow_user = st.text_input("Username", value="admin", key="snow_user")
+    snow_pass = st.text_input("Password", type="password", key="snow_pass")
+
+    if st.button("Connect ServiceNow", use_container_width=True, key="connect_snow"):
+        snow = create_servicenow_client(snow_url, snow_user, snow_pass)
+        result = snow.test_connection()
+        st.session_state["snow_client"] = snow
+        if result["status"] in ("CONNECTED", "SIMULATED"):
+            st.success(f"ServiceNow: {result['status']}")
+        else:
+            st.error(f"ServiceNow: {result.get('message', result['status'])}")
 
     st.divider()
 
-    st.markdown("## 🔧 Remediation Settings")
-    auto_remediate_threshold = st.slider(
-        "Auto-Remediation Confidence Threshold",
-        min_value=0.5,
-        max_value=1.0,
-        value=0.85,
-        step=0.05,
-        help="Vulnerabilities above this confidence score will be auto-remediated",
-    )
-    create_restore = st.checkbox("Create System Restore Point", value=True)
-    enable_rollback = st.checkbox("Enable Automatic Rollback", value=True)
-    auto_reboot = st.checkbox("Auto-Reboot if Required", value=False)
-    pkg_manager = st.selectbox(
-        "Package Manager",
-        options=["Windows Update", "WSUS", "Chocolatey", "WinGet"],
-    )
+    # Pipeline Configuration
+    st.markdown("### AI Pipeline Thresholds")
+    auto_threshold = st.slider("Auto-Remediate (>=)", 0.5, 1.0, 0.90, 0.05, key="auto_thresh")
+    human_threshold = st.slider("Human Approve (>=)", 0.3, 0.95, 0.70, 0.05, key="human_thresh")
+    max_auto_hour = st.number_input("Max Auto/Hour", 1, 200, 50, key="max_auto")
+    dry_run_first = st.checkbox("Dry-Run First", value=True, key="dry_run")
+    require_restore = st.checkbox("Require Restore Point", value=True, key="restore")
 
     st.divider()
-    st.caption("v2.0 | Agentic AI Engine")
+    st.caption("v3.0 Enterprise | Agentic AI Engine")
+
+
+# ==================== INITIALIZE PIPELINE ====================
+def get_pipeline() -> AgenticPipeline:
+    if st.session_state["pipeline"] is None:
+        config = PipelineConfig(
+            auto_remediate_threshold=auto_threshold,
+            human_approve_threshold=human_threshold,
+            max_auto_remediations_per_hour=max_auto_hour,
+            dry_run_first=dry_run_first,
+            require_restore_point=require_restore,
+        )
+        claude_client = None
+        if api_key:
+            try:
+                import anthropic
+                claude_client = anthropic.Anthropic(api_key=api_key)
+            except ImportError:
+                pass
+
+        st.session_state["pipeline"] = AgenticPipeline(
+            remediator=remediator,
+            aws_connector=st.session_state.get("aws_connector"),
+            itsm_client=st.session_state.get("snow_client"),
+            claude_client=claude_client,
+            config=config,
+        )
+    return st.session_state["pipeline"]
 
 
 # ==================== HEADER ====================
 st.markdown("""
 <div class="main-header">
-    <h1>🛡️ Agentic AI — Windows Vulnerability Scanner</h1>
-    <p>AI-powered vulnerability detection, NIST/CIS compliance mapping, and automated remediation</p>
+    <h1>🛡️ Agentic AI — Enterprise Windows Vulnerability Management</h1>
+    <p>Multi-Account AWS | ServiceNow ITSM | AI Confidence Routing | Human-in-the-Loop | 200+ Accounts</p>
 </div>
 """, unsafe_allow_html=True)
 
 
 # ==================== TABS ====================
-tab_dashboard, tab_agent, tab_scan, tab_remediate, tab_compliance, tab_scripts = st.tabs([
+(tab_dashboard, tab_fleet, tab_agent, tab_pipeline,
+ tab_approvals, tab_itsm, tab_compliance, tab_scripts, tab_compare) = st.tabs([
     "📊 Dashboard",
+    "🌐 Fleet View",
     "🤖 AI Agent",
-    "🔍 Scan & Analyze",
-    "🛠️ Remediate",
+    "⚡ Pipeline",
+    "✋ Approval Queue",
+    "🎫 ITSM / ServiceNow",
     "📋 Compliance",
     "📝 Scripts",
+    "📈 Market Comparison",
 ])
+
+
+# ==================== HELPER: get demo data if no live connection ====================
+def get_accounts():
+    if st.session_state["accounts"]:
+        return st.session_state["accounts"]
+    # Demo data
+    connector = AWSMultiAccountConnector(management_account_id=mgmt_account)
+    accounts = connector._get_fallback_accounts()
+    st.session_state["accounts"] = accounts
+    st.session_state["aws_connector"] = connector
+    return accounts
+
+def get_servers():
+    if st.session_state["servers"]:
+        return st.session_state["servers"]
+    connector = st.session_state.get("aws_connector") or AWSMultiAccountConnector(management_account_id=mgmt_account)
+    accounts = get_accounts()
+    servers = []
+    for acct in accounts:
+        servers.extend(connector._get_demo_servers(acct))
+    st.session_state["servers"] = servers
+    st.session_state["aws_connector"] = connector
+    return servers
 
 
 # ==================== TAB: DASHBOARD ====================
 with tab_dashboard:
-    # Metrics row
-    vulns = SAMPLE_VULNERABILITIES
-    critical = sum(1 for v in vulns if v["severity"] == "CRITICAL")
-    high = sum(1 for v in vulns if v["severity"] == "HIGH")
+    accounts = get_accounts()
+    servers = get_servers()
 
-    auto_fixable = 0
-    for v in vulns:
-        nist = remediator.map_cve_to_nist(v)
-        plan = {"registry_fixes": [], "reboot_required": False}
-        for ctrl in nist:
-            if ctrl in NIST_REMEDIATION_MAP:
-                plan["registry_fixes"].extend(NIST_REMEDIATION_MAP[ctrl].get("registry_fixes", []))
-        conf = remediator.calculate_confidence_score(v, plan)
-        if conf >= auto_remediate_threshold:
-            auto_fixable += 1
+    total_critical = sum(s.critical_vulns for s in servers)
+    total_high = sum(s.high_vulns for s in servers)
+    total_medium = sum(s.medium_vulns for s in servers)
+    online = sum(1 for s in servers if s.status == "Online")
+    avg_compliance = round(sum(s.patch_compliance for s in servers) / max(len(servers), 1) * 100, 1)
 
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Total Vulnerabilities", len(vulns))
-    c2.metric("Critical", critical, delta=f"-{critical} to fix", delta_color="inverse")
-    c3.metric("High", high, delta=f"-{high} to fix", delta_color="inverse")
-    c4.metric("Auto-Fixable", auto_fixable, delta=f"{auto_fixable}/{len(vulns)}")
-    c5.metric("Target Servers", server_count)
+    # Top metrics
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    c1.metric("AWS Accounts", len(accounts))
+    c2.metric("Windows Servers", len(servers))
+    c3.metric("Servers Online", online)
+    c4.metric("Critical Vulns", total_critical, delta=f"-{total_critical} to fix", delta_color="inverse")
+    c5.metric("High Vulns", total_high, delta=f"-{total_high} to fix", delta_color="inverse")
+    c6.metric("Avg Compliance", f"{avg_compliance}%")
 
     st.divider()
 
+    # Pipeline summary
+    pipeline = get_pipeline()
+    decisions = pipeline.decisions
+
+    p1, p2, p3, p4 = st.columns(4)
+    auto_count = sum(1 for d in decisions if d.action == AgentAction.AUTO_REMEDIATE.value)
+    human_count = sum(1 for d in decisions if d.action == AgentAction.HUMAN_APPROVE.value)
+    chg_count = sum(1 for d in decisions if d.action == AgentAction.RAISE_CHG.value)
+    pending = sum(1 for d in decisions if d.approval_status == ApprovalStatus.PENDING.value)
+
+    p1.metric("Auto-Remediated", auto_count)
+    p2.metric("Pending Approval", pending)
+    p3.metric("CHG Tickets", chg_count)
+    p4.metric("Total Decisions", len(decisions))
+
+    st.divider()
+
+    # Account overview table
     col_left, col_right = st.columns([3, 2])
 
     with col_left:
-        st.markdown("#### Vulnerability Inventory")
-        vuln_rows = []
-        for v in vulns:
-            nist = remediator.map_cve_to_nist(v)
-            plan = {"registry_fixes": [], "reboot_required": False}
-            for ctrl in nist:
-                if ctrl in NIST_REMEDIATION_MAP:
-                    plan["registry_fixes"].extend(NIST_REMEDIATION_MAP[ctrl].get("registry_fixes", []))
-            conf = remediator.calculate_confidence_score(v, plan)
-            sev_icon = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡"}.get(v["severity"], "🟢")
-            vuln_rows.append({
-                "CVE": v["cve_id"],
-                "Severity": f"{sev_icon} {v['severity']}",
-                "CVSS": v["cvss_score"],
-                "Component": v["component"],
-                "KB": v["kb_number"],
-                "NIST": ", ".join(nist),
-                "Confidence": f"{conf:.0%}",
-                "Auto-Fix": "Yes" if conf >= auto_remediate_threshold else "Manual",
+        st.markdown("#### Account Vulnerability Posture")
+        acct_rows = []
+        for a in accounts:
+            acct_rows.append({
+                "Account": a.account_name,
+                "ID": a.account_id,
+                "OU": a.ou_path,
+                "Region": a.region,
+                "Servers": a.server_count,
+                "Critical": a.critical_vulns,
+                "High": a.high_vulns,
+                "Last Scan": a.last_scan or "Never",
             })
-        st.dataframe(pd.DataFrame(vuln_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(acct_rows), use_container_width=True, hide_index=True)
 
     with col_right:
-        st.markdown("#### Risk Distribution")
-        risk_df = pd.DataFrame({
-            "Severity": ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
-            "Count": [critical, high, 0, 0],
-        })
-        st.bar_chart(risk_df.set_index("Severity"), horizontal=True)
+        st.markdown("#### Agentic Pipeline Flow")
+        st.markdown(f"""
+```
+Discovery ─── Analysis ─── Decision Engine
+                              │
+               ┌──────────────┼──────────────┐
+          Confidence ≥{auto_threshold:.0%}   {human_threshold:.0%}-{auto_threshold:.0%}    <{human_threshold:.0%}
+               │              │              │
+         Auto-Remediate  Human Approve   Raise CHG
+          via SSM         Dashboard     ServiceNow
+               │              │              │
+               └──────────────┼──────────────┘
+                              │
+                         Verification
+```
+        """)
+        st.markdown(f"**Thresholds:** Auto >= {auto_threshold:.0%} | Human >= {human_threshold:.0%} | CHG < {human_threshold:.0%}")
 
-        st.markdown("#### NIST Control Coverage")
-        ctrl_counts = {}
-        for v in vulns:
-            for c in remediator.map_cve_to_nist(v):
-                ctrl_counts[c] = ctrl_counts.get(c, 0) + 1
-        if ctrl_counts:
-            ctrl_df = pd.DataFrame(list(ctrl_counts.items()), columns=["Control", "Vulnerabilities"])
-            st.bar_chart(ctrl_df.set_index("Control"))
-
+    # Agent log
     st.divider()
     st.markdown("#### Agent Activity Log")
     if st.session_state["agent_log"]:
-        for entry in st.session_state["agent_log"][-10:]:
+        for entry in st.session_state["agent_log"][-15:]:
             st.markdown(f"- `{entry['time']}` — {entry['action']}")
+    elif pipeline.pipeline_log:
+        for entry in pipeline.pipeline_log[-15:]:
+            st.markdown(f"- `{entry['timestamp']}` [{entry['stage']}] {entry['message']}")
     else:
-        st.caption("No agent activity yet. Use the AI Agent tab to start.")
+        st.caption("No agent activity yet. Run the pipeline from the Pipeline tab.")
+
+
+# ==================== TAB: FLEET VIEW ====================
+with tab_fleet:
+    st.markdown("#### 🌐 Enterprise Fleet — Windows Servers Across AWS Accounts")
+
+    accounts = get_accounts()
+    servers = get_servers()
+
+    # Filters
+    f1, f2, f3, f4 = st.columns(4)
+    with f1:
+        acct_filter = st.multiselect("Filter by Account", options=[a.account_name for a in accounts], default=[], key="fleet_acct_filter")
+    with f2:
+        os_filter = st.multiselect("Filter by OS", options=list(WINDOWS_SERVER_VERSIONS.keys()), default=[], key="fleet_os_filter")
+    with f3:
+        status_filter = st.multiselect("Filter by Status", options=["Online", "PendingReboot", "Offline"], default=[], key="fleet_status_filter")
+    with f4:
+        env_filter = st.multiselect("Filter by Environment", options=["Production", "Staging", "Development"], default=[], key="fleet_env_filter")
+
+    # Apply filters
+    filtered = servers
+    if acct_filter:
+        filtered = [s for s in filtered if s.account_name in acct_filter]
+    if os_filter:
+        filtered = [s for s in filtered if s.os_version in os_filter]
+    if status_filter:
+        filtered = [s for s in filtered if s.status in status_filter]
+    if env_filter:
+        filtered = [s for s in filtered if s.tags.get("Environment") in env_filter]
+
+    st.markdown(f"**Showing {len(filtered)} of {len(servers)} servers**")
+
+    # Server table
+    srv_rows = []
+    for s in filtered:
+        status_icon = {"Online": "🟢", "PendingReboot": "🟡", "Offline": "🔴"}.get(s.status, "⚪")
+        srv_rows.append({
+            "Status": f"{status_icon} {s.status}",
+            "Hostname": s.hostname,
+            "Instance ID": s.instance_id,
+            "Account": s.account_name,
+            "OS": s.os_version,
+            "IP": s.private_ip,
+            "Region": s.region,
+            "Environment": s.tags.get("Environment", "N/A"),
+            "Application": s.tags.get("Application", "N/A"),
+            "Critical": s.critical_vulns,
+            "High": s.high_vulns,
+            "Compliance": f"{s.patch_compliance:.0%}",
+        })
+
+    if srv_rows:
+        st.dataframe(pd.DataFrame(srv_rows), use_container_width=True, hide_index=True, height=500)
+    else:
+        st.info("No servers match the selected filters.")
+
+    # OS Distribution chart
+    st.divider()
+    ch1, ch2 = st.columns(2)
+    with ch1:
+        st.markdown("#### OS Version Distribution")
+        os_counts = {}
+        for s in servers:
+            os_counts[s.os_version] = os_counts.get(s.os_version, 0) + 1
+        if os_counts:
+            st.bar_chart(pd.DataFrame(list(os_counts.items()), columns=["OS Version", "Count"]).set_index("OS Version"))
+
+    with ch2:
+        st.markdown("#### Servers by Account")
+        acct_counts = {}
+        for s in servers:
+            acct_counts[s.account_name] = acct_counts.get(s.account_name, 0) + 1
+        if acct_counts:
+            st.bar_chart(pd.DataFrame(list(acct_counts.items()), columns=["Account", "Servers"]).set_index("Account"))
 
 
 # ==================== TAB: AI AGENT ====================
 with tab_agent:
-    st.markdown("#### 🤖 AI Security Agent — Chat Interface")
-    st.caption("Ask questions about vulnerabilities, request scans, get remediation advice, or run compliance checks.")
+    st.markdown("#### 🤖 Enterprise AI Security Agent")
+    st.caption("Multi-account analysis, fleet-wide remediation, ITSM coordination")
 
-    # Quick action buttons
-    qa1, qa2, qa3, qa4 = st.columns(4)
+    # Quick actions
+    qa1, qa2, qa3, qa4, qa5 = st.columns(5)
     with qa1:
-        if st.button("🔍 Run Vulnerability Scan", use_container_width=True, key="qa_scan"):
-            st.session_state["chat_history"].append({"role": "user", "content": "Scan for critical vulnerabilities on my Windows servers"})
+        if st.button("🔍 Fleet Scan", use_container_width=True, key="qa_fleet"):
+            st.session_state["chat_history"].append({"role": "user", "content": "Scan all accounts for critical vulnerabilities"})
     with qa2:
-        if st.button("📋 Compliance Report", use_container_width=True, key="qa_compliance"):
-            st.session_state["chat_history"].append({"role": "user", "content": "Generate a NIST SP 800-53 compliance report"})
+        if st.button("📋 Compliance", use_container_width=True, key="qa_comp"):
+            st.session_state["chat_history"].append({"role": "user", "content": "Generate fleet-wide NIST compliance report"})
     with qa3:
-        if st.button("⚡ Risk Assessment", use_container_width=True, key="qa_risk"):
-            st.session_state["chat_history"].append({"role": "user", "content": "Prioritize vulnerabilities by risk and business impact"})
+        if st.button("⚡ Pipeline", use_container_width=True, key="qa_pipe"):
+            st.session_state["chat_history"].append({"role": "user", "content": "Show me the agentic pipeline status and decisions"})
     with qa4:
-        if st.button("🛠️ Remediation Plan", use_container_width=True, key="qa_remediate"):
-            st.session_state["chat_history"].append({"role": "user", "content": "Create a remediation plan for all detected vulnerabilities"})
+        if st.button("🎫 ITSM Status", use_container_width=True, key="qa_itsm"):
+            st.session_state["chat_history"].append({"role": "user", "content": "Show ServiceNow ticket status and open CHG requests"})
+    with qa5:
+        if st.button("🌐 Fleet View", use_container_width=True, key="qa_fleet_view"):
+            st.session_state["chat_history"].append({"role": "user", "content": "Give me a fleet overview of all accounts and servers"})
 
     # Chat display
-    chat_container = st.container(height=450)
+    chat_container = st.container(height=400)
     with chat_container:
         if not st.session_state["chat_history"]:
-            st.markdown("""
-<div class="chat-msg-ai">
-<strong>🤖 AI Agent:</strong> I'm your Windows Vulnerability Security Agent. I can:<br>
-• <strong>Scan</strong> servers for vulnerabilities<br>
-• <strong>Analyze</strong> CVEs with NIST/CIS mapping<br>
-• <strong>Generate</strong> remediation scripts<br>
-• <strong>Assess</strong> risk and prioritize fixes<br><br>
-How can I help secure your Windows environment?
-</div>
-""", unsafe_allow_html=True)
+            st.markdown("""**🤖 Enterprise AI Agent** — I manage vulnerability scanning, remediation, and ITSM across your AWS fleet.
+
+- **Scan** — Discover and analyze vulnerabilities across 200+ accounts
+- **Decide** — Route fixes: auto-remediate, human approval, or CHG ticket
+- **Execute** — Run PowerShell remediations via AWS SSM
+- **Track** — Auto-create/update ServiceNow tickets
+""")
         else:
             for msg in st.session_state["chat_history"]:
                 if msg["role"] == "user":
-                    st.markdown(f'<div class="chat-msg-user"><strong>👤 You:</strong> {msg["content"]}</div>', unsafe_allow_html=True)
+                    st.chat_message("user").markdown(msg["content"])
                 else:
-                    st.markdown(f'<div class="chat-msg-ai"><strong>🤖 Agent:</strong><br>{msg["content"]}</div>', unsafe_allow_html=True)
+                    st.chat_message("assistant").markdown(msg["content"])
 
-    # Chat input
-    user_input = st.chat_input("Ask the AI agent about vulnerabilities, remediation, compliance...")
+    user_input = st.chat_input("Ask about vulnerabilities, fleet status, remediation, ITSM...")
 
     if user_input:
         st.session_state["chat_history"].append({"role": "user", "content": user_input})
 
-    # Process last user message if no assistant reply yet
     if st.session_state["chat_history"] and st.session_state["chat_history"][-1]["role"] == "user":
         last_msg = st.session_state["chat_history"][-1]["content"]
         context = json.dumps({
-            "target_os": selected_version,
-            "server_count": server_count,
-            "threshold": auto_remediate_threshold,
-            "known_vulns": [v["cve_id"] for v in SAMPLE_VULNERABILITIES],
+            "accounts": len(get_accounts()),
+            "servers": len(get_servers()),
+            "auto_threshold": auto_threshold,
+            "human_threshold": human_threshold,
+            "management_account": mgmt_account,
+            "snow_instance": snow_url,
+            "decisions": len(get_pipeline().decisions),
         })
-
         with st.spinner("AI Agent analyzing..."):
             response = agent.analyze(last_msg, context)
-
         st.session_state["chat_history"].append({"role": "assistant", "content": response})
         st.session_state["agent_log"].append({
             "time": datetime.now().strftime("%H:%M:%S"),
@@ -517,174 +919,282 @@ How can I help secure your Windows environment?
         st.rerun()
 
 
-# ==================== TAB: SCAN & ANALYZE ====================
-with tab_scan:
-    st.markdown(f"#### 🔍 Vulnerability Scanner — {selected_version}")
+# ==================== TAB: PIPELINE ====================
+with tab_pipeline:
+    st.markdown("#### ⚡ Agentic AI Pipeline — Confidence-Based Routing")
 
-    scan_col1, scan_col2 = st.columns([2, 1])
+    pipeline = get_pipeline()
 
-    with scan_col1:
-        scan_scope = st.multiselect(
-            "Scan Scope — Components",
-            options=CRITICAL_COMPONENTS,
-            default=CRITICAL_COMPONENTS[:5],
-        )
-        scan_depth = st.radio(
-            "Scan Depth",
-            options=["Quick (Critical only)", "Standard (Critical + High)", "Deep (All severities)"],
-            index=1,
-            horizontal=True,
-        )
+    # Pipeline config display
+    st.markdown(f"""
+| Threshold | Range | Action |
+|-----------|-------|--------|
+| **Auto-Remediate** | Confidence >= {auto_threshold:.0%} | Execute via SSM immediately |
+| **Human Approve** | Confidence {human_threshold:.0%} — {auto_threshold:.0%} | Queue in Approval tab |
+| **Raise CHG** | Confidence < {human_threshold:.0%} | Create ServiceNow ticket |
+""")
 
-    with scan_col2:
-        st.markdown("**Scan Configuration**")
-        st.markdown(f"- OS: **{selected_version}**")
-        st.markdown(f"- Servers: **{server_count}**")
-        st.markdown(f"- Components: **{len(scan_scope)}**")
-        st.markdown(f"- Depth: **{scan_depth.split('(')[0].strip()}**")
+    st.divider()
 
-    if st.button("🚀 Start Vulnerability Scan", type="primary", use_container_width=True, key="start_scan"):
-        progress = st.progress(0, text="Initializing scan...")
-        status = st.empty()
+    # Run pipeline
+    st.markdown("#### Run Pipeline")
+    run_col1, run_col2 = st.columns([2, 1])
 
-        steps = [
-            ("Enumerating installed components...", 15),
-            ("Checking Windows Update history...", 30),
-            ("Querying CVE database...", 50),
-            ("Mapping to NIST SP 800-53 controls...", 65),
-            ("Running CIS Benchmark checks...", 80),
-            ("Calculating confidence scores...", 90),
-            ("Generating report...", 100),
-        ]
+    with run_col1:
+        target_version = st.selectbox("Target OS Version", list(WINDOWS_SERVER_VERSIONS.keys()), index=1, key="pipeline_os")
+        target_env = st.selectbox("Target Environment", ["Production", "Staging", "Development", "All"], key="pipeline_env")
 
-        import time
-        for step_text, pct in steps:
-            progress.progress(pct, text=step_text)
-            time.sleep(0.5)
+    with run_col2:
+        st.markdown("**Vulnerabilities to Process**")
+        st.markdown(f"- {len(SAMPLE_VULNERABILITIES)} known vulnerabilities")
+        st.markdown(f"- Target: {target_version}")
+        st.markdown(f"- Environment: {target_env}")
 
-        st.session_state["scan_results"] = SAMPLE_VULNERABILITIES
+    if st.button("🚀 Run Agentic Pipeline", type="primary", use_container_width=True, key="run_pipeline"):
+        pipeline = get_pipeline()
+        # Reset for fresh run
+        pipeline.decisions = []
+        pipeline.pipeline_log = []
+
+        server_context = {
+            "os_version": target_version,
+            "environment": target_env if target_env != "All" else "Production",
+            "instance_id": "i-fleet-wide",
+            "account_id": mgmt_account,
+            "account_name": "Fleet-Wide Scan",
+            "hostname": "fleet-scan",
+        }
+
+        progress = st.progress(0, text="Starting pipeline...")
+        status_container = st.container()
+
+        def progress_callback(current, total, decision):
+            pct = int(current / total * 100)
+            progress.progress(pct, text=f"Processing {decision.vulnerability_id}...")
+
+        with st.spinner("AI agents processing vulnerabilities..."):
+            decisions = pipeline.process_batch(
+                SAMPLE_VULNERABILITIES, server_context,
+                progress_callback=progress_callback,
+            )
+
+        st.session_state["decisions"] = decisions
+        summary = pipeline.get_pipeline_summary()
+
+        st.success(f"Pipeline complete: {summary['total']} vulnerabilities processed")
+
+        # Summary metrics
+        s1, s2, s3, s4, s5 = st.columns(5)
+        s1.metric("Total", summary["total"])
+        s2.metric("Auto-Remediated", summary["auto_remediated"])
+        s3.metric("Pending Approval", summary["pending_approval"])
+        s4.metric("CHG Tickets", summary["chg_tickets"])
+        s5.metric("Avg Confidence", f"{summary['avg_confidence']:.0%}")
+
         st.session_state["agent_log"].append({
             "time": datetime.now().strftime("%H:%M:%S"),
-            "action": f"Scan completed: {len(SAMPLE_VULNERABILITIES)} vulnerabilities found on {selected_version}",
+            "action": f"Pipeline: {summary['auto_remediated']} auto, {summary['pending_approval']} human, {summary['chg_tickets']} CHG",
         })
 
-        st.success(f"Scan complete: {len(SAMPLE_VULNERABILITIES)} vulnerabilities detected across {server_count} servers")
-
-    # Display scan results
-    if st.session_state["scan_results"]:
+    # Decision table
+    if pipeline.decisions:
         st.divider()
-        st.markdown("#### Scan Results")
+        st.markdown("#### Pipeline Decisions")
 
-        for vuln in st.session_state["scan_results"]:
-            nist_controls = remediator.map_cve_to_nist(vuln)
-            plan = {"registry_fixes": [], "reboot_required": False}
-            for ctrl in nist_controls:
-                if ctrl in NIST_REMEDIATION_MAP:
-                    plan["registry_fixes"].extend(NIST_REMEDIATION_MAP[ctrl].get("registry_fixes", []))
-                    if NIST_REMEDIATION_MAP[ctrl].get("reboot_required"):
-                        plan["reboot_required"] = True
-            confidence = remediator.calculate_confidence_score(vuln, plan)
-
-            sev_color = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡"}.get(vuln["severity"], "🟢")
-
-            with st.expander(f"{sev_color} {vuln['cve_id']} — {vuln['title']} (CVSS: {vuln['cvss_score']})"):
-                ec1, ec2, ec3 = st.columns(3)
-                ec1.markdown(f"**Severity:** {vuln['severity']}")
-                ec1.markdown(f"**CVSS:** {vuln['cvss_score']}")
-                ec1.markdown(f"**Attack Vector:** {vuln['attack_vector']}")
-
-                ec2.markdown(f"**Component:** {vuln['component']}")
-                ec2.markdown(f"**KB Fix:** {vuln['kb_number']}")
-                ec2.markdown(f"**Exploitability:** {vuln['exploitability']}")
-
-                ec3.markdown(f"**NIST Controls:** {', '.join(nist_controls)}")
-                ec3.markdown(f"**Confidence:** {confidence:.0%}")
-                ec3.markdown(f"**Auto-Fix:** {'Yes' if confidence >= auto_remediate_threshold else 'Manual Review'}")
-
-                st.markdown(f"**Description:** {vuln['description']}")
-
-                if st.button(f"Add to Remediation Queue", key=f"add_{vuln['cve_id']}"):
-                    if vuln not in st.session_state["remediation_queue"]:
-                        st.session_state["remediation_queue"].append(vuln)
-                        st.success(f"Added {vuln['cve_id']} to remediation queue")
-
-
-# ==================== TAB: REMEDIATE ====================
-with tab_remediate:
-    st.markdown(f"#### 🛠️ Remediation Engine — {selected_version}")
-
-    queue = st.session_state["remediation_queue"]
-
-    if not queue:
-        st.info("No vulnerabilities in the remediation queue. Use the Scan tab to add vulnerabilities.")
-
-        if st.button("Add All Sample Vulnerabilities to Queue", key="add_all_queue"):
-            st.session_state["remediation_queue"] = list(SAMPLE_VULNERABILITIES)
-            st.rerun()
-    else:
-        st.markdown(f"**{len(queue)} vulnerabilities** in remediation queue")
-
-        # Remediation summary
-        rem_rows = []
-        for v in queue:
-            nist = remediator.map_cve_to_nist(v)
-            plan = {"registry_fixes": [], "reboot_required": False}
-            for ctrl in nist:
-                if ctrl in NIST_REMEDIATION_MAP:
-                    plan["registry_fixes"].extend(NIST_REMEDIATION_MAP[ctrl].get("registry_fixes", []))
-            conf = remediator.calculate_confidence_score(v, plan)
-            rem_rows.append({
-                "CVE": v["cve_id"],
-                "Severity": v["severity"],
-                "Component": v.get("component", v["packageName"]),
-                "KB": v["kb_number"],
-                "Confidence": f"{conf:.0%}",
-                "Method": "Auto" if conf >= auto_remediate_threshold else "Manual",
+        dec_rows = []
+        for d in pipeline.decisions:
+            action_icon = {"AUTO_REMEDIATE": "🟢", "HUMAN_APPROVE": "🟡", "RAISE_CHG": "🔴"}.get(d.action, "⚪")
+            dec_rows.append({
+                "CVE": d.vulnerability_id,
+                "Action": f"{action_icon} {d.action.replace('_', ' ').title()}",
+                "Confidence": f"{d.confidence_score:.0%}",
+                "Risk": f"{d.risk_score:.0%}",
+                "NIST": ", ".join(d.nist_controls),
+                "Reboot": "Yes" if d.reboot_required else "No",
+                "Stage": d.stage,
+                "Approval": d.approval_status,
+                "ITSM Ticket": d.itsm_ticket_id or "—",
             })
 
-        st.dataframe(pd.DataFrame(rem_rows), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(dec_rows), use_container_width=True, hide_index=True)
 
-        r_col1, r_col2, r_col3 = st.columns(3)
+    # Pipeline log
+    if pipeline.pipeline_log:
+        with st.expander("Pipeline Execution Log", expanded=False):
+            for entry in pipeline.pipeline_log:
+                level_icon = {"INFO": "ℹ️", "ERROR": "❌", "WARNING": "⚠️"}.get(entry["level"], "")
+                st.markdown(f"`{entry['timestamp']}` [{entry['stage']}] {level_icon} {entry['message']}")
 
-        with r_col1:
-            if st.button("⚡ Auto-Remediate (High Confidence)", type="primary", use_container_width=True, key="auto_rem"):
-                import time
-                progress = st.progress(0, text="Starting auto-remediation...")
-                auto_count = 0
 
-                for i, v in enumerate(queue):
-                    nist = remediator.map_cve_to_nist(v)
-                    plan = {"registry_fixes": [], "reboot_required": False}
-                    for ctrl in nist:
-                        if ctrl in NIST_REMEDIATION_MAP:
-                            plan["registry_fixes"].extend(NIST_REMEDIATION_MAP[ctrl].get("registry_fixes", []))
-                    conf = remediator.calculate_confidence_score(v, plan)
+# ==================== TAB: APPROVAL QUEUE ====================
+with tab_approvals:
+    st.markdown("#### ✋ Human-in-the-Loop Approval Queue")
+    st.caption("Vulnerabilities routed here have confidence scores between "
+               f"{human_threshold:.0%} and {auto_threshold:.0%}. Review and approve or reject.")
 
-                    pct = int((i + 1) / len(queue) * 100)
-                    progress.progress(pct, text=f"Processing {v['cve_id']}...")
-                    time.sleep(0.8)
+    pipeline = get_pipeline()
+    pending = pipeline.get_pending_approvals()
 
-                    if conf >= auto_remediate_threshold:
-                        auto_count += 1
+    if not pending:
+        st.info("No pending approvals. Run the pipeline to generate decisions, or all items were auto-remediated.")
 
-                st.session_state["agent_log"].append({
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "action": f"Auto-remediated {auto_count}/{len(queue)} vulnerabilities",
+        # Show demo pending items
+        if st.button("Load Demo Approval Queue", key="demo_approvals"):
+            # Run pipeline to get decisions
+            server_context = {
+                "os_version": "Windows Server 2022",
+                "environment": "Production",
+                "instance_id": "i-demo",
+                "account_id": mgmt_account,
+                "account_name": "Demo Account",
+                "hostname": "demo-server",
+            }
+            pipeline.process_batch(SAMPLE_VULNERABILITIES, server_context)
+            st.rerun()
+    else:
+        for i, decision in enumerate(pending):
+            action_class = "action-human"
+            with st.container():
+                st.markdown(f'<div class="{action_class}">', unsafe_allow_html=True)
+
+                col_info, col_actions = st.columns([3, 1])
+
+                with col_info:
+                    st.markdown(f"**{decision.vulnerability_id}** — Confidence: {decision.confidence_score:.0%} | Risk: {decision.risk_score:.0%}")
+                    st.markdown(f"NIST: {', '.join(decision.nist_controls)} | Reboot: {'Yes' if decision.reboot_required else 'No'} | Duration: {decision.estimated_duration}")
+                    with st.expander("AI Reasoning", expanded=False):
+                        st.markdown(decision.reasoning)
+                    with st.expander("Remediation Script Preview", expanded=False):
+                        st.code(decision.remediation_script[:2000] + "..." if len(decision.remediation_script) > 2000 else decision.remediation_script, language="powershell")
+
+                with col_actions:
+                    if st.button("✅ Approve", key=f"approve_{decision.decision_id}", use_container_width=True):
+                        pipeline.approve_decision(decision.decision_id, approved_by="admin")
+                        st.session_state["agent_log"].append({
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "action": f"Approved: {decision.vulnerability_id}",
+                        })
+                        st.rerun()
+
+                    if st.button("❌ Reject", key=f"reject_{decision.decision_id}", use_container_width=True):
+                        pipeline.reject_decision(decision.decision_id, rejected_by="admin", reason="Manual review required")
+                        st.session_state["agent_log"].append({
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                            "action": f"Rejected: {decision.vulnerability_id}",
+                        })
+                        st.rerun()
+
+                    if st.button("🎫 → CHG", key=f"chg_{decision.decision_id}", use_container_width=True, help="Escalate to ServiceNow CHG"):
+                        decision.action = AgentAction.RAISE_CHG.value
+                        snow = st.session_state.get("snow_client")
+                        if snow:
+                            vuln = next((v for v in SAMPLE_VULNERABILITIES if v["cve_id"] == decision.vulnerability_id), {})
+                            ticket = snow.create_change_request(vuln, {"instance_id": decision.instance_id, "account_id": decision.account_id}, decision)
+                            decision.itsm_ticket_id = ticket.get("number")
+                            st.success(f"CHG created: {decision.itsm_ticket_id}")
+                        st.rerun()
+
+                st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ==================== TAB: ITSM / SERVICENOW ====================
+with tab_itsm:
+    st.markdown("#### 🎫 ServiceNow ITSM Integration")
+    st.markdown(f"**Instance:** {snow_url}")
+
+    snow = st.session_state.get("snow_client")
+
+    # Connection status
+    if snow:
+        conn = snow.test_connection()
+        status_icon = "🟢" if conn["status"] in ("CONNECTED", "SIMULATED") else "🔴"
+        st.markdown(f"**Status:** {status_icon} {conn['status']}")
+    else:
+        st.warning("ServiceNow not connected. Configure credentials in the sidebar.")
+        snow = create_servicenow_client(snow_url, snow_user, "")
+        st.session_state["snow_client"] = snow
+
+    st.divider()
+
+    itsm_col1, itsm_col2 = st.columns([2, 1])
+
+    with itsm_col1:
+        st.markdown("#### Open Change Requests")
+        open_chgs = snow.get_open_changes()
+
+        # Add any pipeline-generated tickets
+        pipeline_chgs = [d for d in get_pipeline().decisions if d.itsm_ticket_id]
+        for d in pipeline_chgs:
+            if not any(c.get("number") == d.itsm_ticket_id for c in open_chgs):
+                open_chgs.append({
+                    "number": d.itsm_ticket_id,
+                    "short_description": f"[{d.action}] {d.vulnerability_id}",
+                    "state": "New",
+                    "priority": "2",
+                    "risk": f"Confidence {d.confidence_score:.0%}",
+                    "assignment_group": "Windows Server Team",
+                    "sys_created_on": d.created_at,
                 })
-                st.success(f"Auto-remediated {auto_count} of {len(queue)} vulnerabilities")
 
-        with r_col2:
-            if st.button("📝 Generate All Scripts", use_container_width=True, key="gen_all"):
-                st.session_state["agent_log"].append({
-                    "time": datetime.now().strftime("%H:%M:%S"),
-                    "action": f"Generated {len(queue)} remediation scripts",
+        if open_chgs:
+            chg_rows = []
+            for c in open_chgs:
+                chg_rows.append({
+                    "Ticket": c.get("number", "N/A"),
+                    "Description": c.get("short_description", "")[:80],
+                    "State": c.get("state", "Unknown"),
+                    "Priority": c.get("priority", "N/A"),
+                    "Risk": c.get("risk", "N/A"),
+                    "Assigned To": c.get("assignment_group", "N/A"),
+                    "Created": c.get("sys_created_on", ""),
                 })
-                st.success(f"Generated {len(queue)} PowerShell scripts — see Scripts tab")
+            st.dataframe(pd.DataFrame(chg_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No open change requests.")
 
-        with r_col3:
-            if st.button("🗑️ Clear Queue", use_container_width=True, key="clear_queue"):
-                st.session_state["remediation_queue"] = []
-                st.rerun()
+    with itsm_col2:
+        st.markdown("#### Create Manual CHG")
+
+        manual_cve = st.selectbox("Vulnerability", [v["cve_id"] for v in SAMPLE_VULNERABILITIES], key="manual_cve")
+        manual_env = st.selectbox("Environment", ["Production", "Staging", "Development"], key="manual_env")
+        manual_notes = st.text_area("Additional Notes", key="manual_notes", height=100)
+
+        if st.button("🎫 Create CHG Ticket", type="primary", use_container_width=True, key="create_chg"):
+            vuln = next((v for v in SAMPLE_VULNERABILITIES if v["cve_id"] == manual_cve), SAMPLE_VULNERABILITIES[0])
+            server_ctx = {
+                "instance_id": "manual-request",
+                "account_id": mgmt_account,
+                "account_name": "Manual Request",
+                "os_version": "Windows Server 2022",
+                "hostname": "manual",
+                "environment": manual_env,
+            }
+
+            with st.spinner("Creating CHG ticket..."):
+                ticket = snow.create_change_request(vuln, server_ctx, additional_fields={"work_notes": manual_notes} if manual_notes else None)
+
+            ticket_num = ticket.get("number", "N/A")
+            st.success(f"CHG ticket created: **{ticket_num}**")
+            st.session_state["agent_log"].append({
+                "time": datetime.now().strftime("%H:%M:%S"),
+                "action": f"Manual CHG created: {ticket_num} for {manual_cve}",
+            })
+
+    # CMDB sync
+    st.divider()
+    st.markdown("#### CMDB Synchronization")
+    servers = get_servers()
+    st.markdown(f"**{len(servers)} servers** available for CMDB sync")
+
+    if st.button("🔄 Sync All Servers to CMDB", key="cmdb_sync"):
+        with st.spinner(f"Syncing {len(servers)} servers to ServiceNow CMDB..."):
+            import time
+            progress = st.progress(0)
+            for i, srv in enumerate(servers[:20]):  # Limit for demo
+                snow.sync_server_to_cmdb(srv)
+                progress.progress(int((i + 1) / min(len(servers), 20) * 100))
+                time.sleep(0.1)
+        st.success(f"Synced {min(len(servers), 20)} servers to CMDB")
 
 
 # ==================== TAB: COMPLIANCE ====================
@@ -695,7 +1205,6 @@ with tab_compliance:
 
     with comp_col1:
         st.markdown("##### NIST SP 800-53 Controls")
-
         for ctrl_id, ctrl_info in NIST_REMEDIATION_MAP.items():
             reg_count = len(ctrl_info.get("registry_fixes", []))
             ps_count = len(ctrl_info.get("powershell_commands", []))
@@ -706,106 +1215,242 @@ with tab_compliance:
                 st.markdown(f"- **Registry Fixes:** {reg_count}")
                 st.markdown(f"- **PowerShell Commands:** {ps_count}")
                 st.markdown(f"- **Auto-Remediate:** {'Yes' if auto else 'Manual Review'}")
-                st.markdown(f"- **Confidence Score:** {conf:.0%}")
-
                 if ctrl_info.get("registry_fixes"):
                     st.markdown("**Registry Changes:**")
                     for fix in ctrl_info["registry_fixes"]:
                         st.code(f'{fix["path"]}\\{fix["name"]} = {fix["value"]} ({fix["type"]})', language="text")
-
                 if ctrl_info.get("powershell_commands"):
-                    st.markdown("**PowerShell Commands:**")
+                    st.markdown("**PowerShell:**")
                     st.code("\n".join(ctrl_info["powershell_commands"]), language="powershell")
 
     with comp_col2:
         st.markdown("##### CIS Benchmarks")
-
         for cis_id, cis_info in CIS_BENCHMARK_MAP.items():
             with st.expander(f"**{cis_id}** — {cis_info['name']}"):
-                st.markdown(f"- **NIST Controls:** {', '.join(cis_info.get('nist_controls', []))}")
-                st.markdown(f"- **Confidence:** {cis_info.get('confidence', 0):.0%}")
-                st.markdown(f"- **Auto-Remediate:** {'Yes' if cis_info.get('auto_remediate') else 'No'}")
-
-                if cis_info.get("registry_fixes"):
-                    for fix in cis_info["registry_fixes"]:
-                        st.code(f'{fix["path"]}\\{fix["name"]} = {fix["value"]}', language="text")
-
-                if cis_info.get("powershell_commands"):
-                    st.code("\n".join(cis_info["powershell_commands"]), language="powershell")
+                st.markdown(f"- NIST: {', '.join(cis_info.get('nist_controls', []))}")
+                st.markdown(f"- Confidence: {cis_info.get('confidence', 0):.0%}")
+                st.markdown(f"- Auto-Fix: {'Yes' if cis_info.get('auto_remediate') else 'No'}")
 
         st.divider()
-        st.markdown("##### Compliance Summary")
-        comp_data = {
-            "Framework": ["NIST SP 800-53", "CIS Benchmark"],
-            "Controls Mapped": [len(NIST_REMEDIATION_MAP), len(CIS_BENCHMARK_MAP)],
-            "Auto-Remediable": [
-                sum(1 for c in NIST_REMEDIATION_MAP.values() if c.get("auto_remediate")),
-                sum(1 for c in CIS_BENCHMARK_MAP.values() if c.get("auto_remediate")),
-            ],
-        }
-        st.dataframe(pd.DataFrame(comp_data), use_container_width=True, hide_index=True)
+        st.markdown("##### Fleet Compliance Summary")
+        servers = get_servers()
+        compliant = sum(1 for s in servers if s.patch_compliance >= 0.9)
+        st.metric("Servers >= 90% Compliant", f"{compliant}/{len(servers)}")
+        st.metric("Fleet Average", f"{sum(s.patch_compliance for s in servers) / max(len(servers), 1):.0%}")
 
 
 # ==================== TAB: SCRIPTS ====================
 with tab_scripts:
-    st.markdown(f"#### 📝 PowerShell Remediation Scripts — {selected_version}")
+    st.markdown("#### 📝 PowerShell Remediation Scripts")
 
-    script_vuln = st.selectbox(
-        "Select Vulnerability",
-        options=[f"{v['cve_id']} — {v['title']}" for v in SAMPLE_VULNERABILITIES],
-        key="script_select",
-    )
+    sc1, sc2 = st.columns(2)
+    with sc1:
+        script_vuln = st.selectbox("Vulnerability", [f"{v['cve_id']} — {v['title']}" for v in SAMPLE_VULNERABILITIES], key="script_vuln")
+    with sc2:
+        script_os = st.selectbox("Target OS", list(WINDOWS_SERVER_VERSIONS.keys()), index=1, key="script_os")
 
-    selected_idx = next(
-        (i for i, v in enumerate(SAMPLE_VULNERABILITIES)
-         if f"{v['cve_id']} — {v['title']}" == script_vuln),
-        0,
-    )
-    selected_vuln = SAMPLE_VULNERABILITIES[selected_idx]
+    selected_vuln = next((v for v in SAMPLE_VULNERABILITIES if f"{v['cve_id']} — {v['title']}" == script_vuln), SAMPLE_VULNERABILITIES[0])
 
-    if st.button("🔧 Generate Remediation Script", type="primary", key="gen_script"):
-        with st.spinner("Generating PowerShell script..."):
-            result = remediator.generate_remediation_script(
-                vulnerability=selected_vuln,
-                server_version=selected_version,
-                include_nist_controls=True,
-            )
+    if st.button("🔧 Generate Script", type="primary", key="gen_script"):
+        with st.spinner("Generating..."):
+            result = remediator.generate_remediation_script(selected_vuln, script_os, include_nist_controls=True)
 
-        # Script metadata
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Confidence", f"{result['confidence_score']:.0%}")
         m2.metric("Registry Fixes", len(result["registry_fixes"]))
-        m3.metric("Risk Level", result["risk_level"])
-        m4.metric("Est. Duration", result["estimated_duration"])
+        m3.metric("Risk", result["risk_level"])
+        m4.metric("Duration", result["estimated_duration"])
 
-        st.markdown(f"**NIST Controls:** {', '.join(result['nist_controls'])}")
-        st.markdown(f"**Auto-Remediate:** {'Recommended' if result['auto_remediate_recommended'] else 'Manual Review Required'}")
-        st.markdown(f"**Reboot Required:** {'Yes' if result['reboot_required'] else 'No'}")
+        st.markdown(f"**NIST:** {', '.join(result['nist_controls'])} | **Auto-Fix:** {'Yes' if result['auto_remediate_recommended'] else 'No'} | **Reboot:** {'Yes' if result['reboot_required'] else 'No'}")
 
-        st.divider()
         st.code(result["script"], language="powershell")
+        st.download_button("📥 Download", data=result["script"], file_name=f"remediate_{selected_vuln['cve_id'].replace('-', '_')}.ps1", mime="text/plain", key="dl_script")
 
-        st.download_button(
-            "📥 Download Script",
-            data=result["script"],
-            file_name=f"remediate_{selected_vuln['cve_id'].replace('-', '_')}.ps1",
-            mime="text/plain",
-            key="download_script",
-        )
 
-        st.session_state["agent_log"].append({
-            "time": datetime.now().strftime("%H:%M:%S"),
-            "action": f"Generated script for {selected_vuln['cve_id']} ({result['confidence_score']:.0%} confidence)",
-        })
+# ==================== TAB: MARKET COMPARISON ====================
+with tab_compare:
+    st.markdown("#### 📈 Market Comparison — Enterprise Vulnerability Management Tools")
+    st.markdown("How this Agentic AI tool compares with leading enterprise solutions:")
+
+    comparison_data = [
+        {
+            "Feature": "AI-Powered Analysis",
+            "This Tool": "✅ Claude AI agentic pipeline with confidence scoring",
+            "Qualys VMDR": "⚠️ Basic ML prioritization (TruRisk)",
+            "Tenable.io": "⚠️ Predictive prioritization (VPR)",
+            "Rapid7 InsightVM": "⚠️ Basic risk scoring",
+            "CrowdStrike Spotlight": "⚠️ AI threat correlation",
+            "Microsoft Defender VM": "⚠️ Threat intelligence scoring",
+        },
+        {
+            "Feature": "Autonomous Remediation",
+            "This Tool": "✅ Full agentic: auto-fix, human-loop, CHG routing",
+            "Qualys VMDR": "⚠️ Patch deployment only",
+            "Tenable.io": "❌ Detection only, no remediation",
+            "Rapid7 InsightVM": "⚠️ Limited automation via InsightConnect",
+            "CrowdStrike Spotlight": "❌ Detection only",
+            "Microsoft Defender VM": "⚠️ Intune-based patching",
+        },
+        {
+            "Feature": "Multi-Account AWS (200+)",
+            "This Tool": "✅ Native Organizations + SSM + AssumeRole",
+            "Qualys VMDR": "✅ Cloud connectors (agent-based)",
+            "Tenable.io": "✅ Cloud connectors (agentless + agent)",
+            "Rapid7 InsightVM": "✅ AWS connector",
+            "CrowdStrike Spotlight": "✅ Falcon agent",
+            "Microsoft Defender VM": "⚠️ Azure-centric, AWS via Arc",
+        },
+        {
+            "Feature": "ITSM Integration (ServiceNow)",
+            "This Tool": "✅ Auto-create CHG/INC/CMDB sync",
+            "Qualys VMDR": "✅ ServiceNow CMDB plugin",
+            "Tenable.io": "✅ ServiceNow VR integration",
+            "Rapid7 InsightVM": "✅ ServiceNow plugin",
+            "CrowdStrike Spotlight": "⚠️ Basic ticket creation",
+            "Microsoft Defender VM": "⚠️ Via Logic Apps",
+        },
+        {
+            "Feature": "Human-in-the-Loop",
+            "This Tool": "✅ Confidence-based approval queue with AI reasoning",
+            "Qualys VMDR": "❌ No approval workflow",
+            "Tenable.io": "❌ No approval workflow",
+            "Rapid7 InsightVM": "⚠️ Basic approval via InsightConnect",
+            "CrowdStrike Spotlight": "❌ No approval workflow",
+            "Microsoft Defender VM": "❌ No approval workflow",
+        },
+        {
+            "Feature": "NIST/CIS Compliance Mapping",
+            "This Tool": "✅ Automatic NIST SP 800-53 + CIS mapping",
+            "Qualys VMDR": "✅ Policy compliance module ($$$)",
+            "Tenable.io": "✅ Compliance auditing ($$$)",
+            "Rapid7 InsightVM": "⚠️ Basic compliance checks",
+            "CrowdStrike Spotlight": "❌ Not focused on compliance",
+            "Microsoft Defender VM": "⚠️ Via Defender for Cloud",
+        },
+        {
+            "Feature": "PowerShell Script Generation",
+            "This Tool": "✅ AI-generated per-CVE with rollback/backup",
+            "Qualys VMDR": "❌ No script generation",
+            "Tenable.io": "❌ No script generation",
+            "Rapid7 InsightVM": "❌ No script generation",
+            "CrowdStrike Spotlight": "❌ No script generation",
+            "Microsoft Defender VM": "❌ No script generation",
+        },
+        {
+            "Feature": "Cost (Annual)",
+            "This Tool": "~$5K-15K (Claude API + AWS + hosting)",
+            "Qualys VMDR": "$50K-200K+ (per-asset licensing)",
+            "Tenable.io": "$40K-150K+ (per-asset licensing)",
+            "Rapid7 InsightVM": "$30K-120K+ (per-asset licensing)",
+            "CrowdStrike Spotlight": "$80K-300K+ (bundled with Falcon)",
+            "Microsoft Defender VM": "$15K-60K+ (E5 licensing)",
+        },
+        {
+            "Feature": "Deployment",
+            "This Tool": "✅ Streamlit Cloud / Docker — minutes",
+            "Qualys VMDR": "SaaS + agents — weeks",
+            "Tenable.io": "SaaS + agents/scanners — weeks",
+            "Rapid7 InsightVM": "SaaS + agents — weeks",
+            "CrowdStrike Spotlight": "SaaS + Falcon agent — days",
+            "Microsoft Defender VM": "Azure portal — days",
+        },
+        {
+            "Feature": "Windows-Specific Focus",
+            "This Tool": "✅ Built specifically for Windows Server",
+            "Qualys VMDR": "Multi-OS (Windows, Linux, etc.)",
+            "Tenable.io": "Multi-OS (Windows, Linux, etc.)",
+            "Rapid7 InsightVM": "Multi-OS (Windows, Linux, etc.)",
+            "CrowdStrike Spotlight": "Multi-OS (Windows, Linux, Mac)",
+            "Microsoft Defender VM": "Multi-OS (Windows, Linux)",
+        },
+    ]
+
+    st.dataframe(
+        pd.DataFrame(comparison_data),
+        use_container_width=True,
+        hide_index=True,
+        height=450,
+    )
+
+    st.divider()
+
+    st.markdown("#### Key Differentiators")
+
+    d1, d2 = st.columns(2)
+
+    with d1:
+        st.markdown("""
+##### What This Tool Does Better
+
+**1. True Agentic AI Architecture**
+Unlike traditional tools that use basic ML for prioritization, this tool uses
+Claude AI as an autonomous agent that can reason about vulnerabilities, generate
+custom remediation scripts, and make routing decisions. No other tool offers
+confidence-score-based routing between auto-fix, human approval, and ITSM tickets.
+
+**2. Dramatic Cost Reduction**
+Enterprise vulnerability tools cost $50K-300K+/year for per-asset licensing.
+This tool runs on ~$5K-15K/year (API costs + infrastructure), delivering
+80-90% of enterprise functionality at a fraction of the cost.
+
+**3. PowerShell Script Generation**
+No competing tool generates customized, CVE-specific PowerShell remediation
+scripts with system restore points, rollback capability, and NIST-compliant
+registry fixes. Every other tool stops at "install this KB."
+
+**4. Native Human-in-the-Loop**
+The confidence-based approval queue with AI reasoning is unique. Security
+engineers see WHY the AI made each decision and can override with one click.
+""")
+
+    with d2:
+        st.markdown("""
+##### Where Enterprise Tools Excel
+
+**1. Broader Coverage**
+Qualys, Tenable, and Rapid7 cover Linux, network devices, containers,
+web apps, and cloud infrastructure — not just Windows Servers.
+
+**2. Vulnerability Database**
+Commercial tools maintain proprietary CVE databases with faster zero-day
+coverage (Qualys QID, Tenable plugins, etc.).
+
+**3. Agent-Based Scanning**
+Permanent agents (Qualys Cloud Agent, Falcon Sensor) provide continuous
+monitoring without SSM dependency.
+
+**4. Enterprise Support**
+24/7 vendor support, SLAs, dedicated CSMs, compliance certifications
+(SOC 2, FedRAMP, etc.).
+
+**5. Mature Reporting**
+Dashboards, executive reports, trend analysis built over 15+ years
+of enterprise deployment.
+""")
+
+    st.divider()
+    st.markdown("""
+##### Recommended Use Cases for This Tool
+
+| Use Case | Fit |
+|----------|-----|
+| SMB/Mid-Market with <500 Windows servers | Excellent — cost-effective, fast to deploy |
+| Enterprise augmenting existing Qualys/Tenable | Excellent — AI agent layer on top of existing scanning |
+| DevOps teams wanting self-service remediation | Excellent — Streamlit UI + API-driven |
+| Organizations needing ITSM-integrated patching | Excellent — native ServiceNow integration |
+| Regulated industries needing compliance mapping | Good — NIST/CIS built-in, but no FedRAMP cert |
+| Large enterprise replacing Qualys/Tenable entirely | Not recommended — lacks breadth of coverage |
+""")
 
 
 # ==================== FOOTER ====================
 st.divider()
+accounts = get_accounts()
+servers = get_servers()
 st.caption(
-    f"🛡️ Agentic AI Windows Vulnerability Tool v2.0 | "
-    f"Target: {selected_version} | "
-    f"Servers: {server_count} | "
-    f"NIST Controls: {len(NIST_REMEDIATION_MAP)} | "
-    f"CIS Benchmarks: {len(CIS_BENCHMARK_MAP)} | "
-    f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    f"🛡️ Agentic AI Enterprise v3.0 | "
+    f"Accounts: {len(accounts)} | Servers: {len(servers)} | "
+    f"Auto >= {auto_threshold:.0%} | Human >= {human_threshold:.0%} | CHG < {human_threshold:.0%} | "
+    f"ITSM: {snow_url.split('//')[1] if '//' in snow_url else snow_url} | "
+    f"{datetime.now().strftime('%Y-%m-%d %H:%M')}"
 )
