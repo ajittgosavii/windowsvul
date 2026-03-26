@@ -72,21 +72,29 @@ def render_login_page():
         /* FULL PAGE DARK BACKGROUND */
         [data-testid="stSidebar"] { display: none !important; }
         header[data-testid="stHeader"] { display: none !important; }
+        [data-testid="stToolbar"] { display: none !important; }
+        [data-testid="stDecoration"] { display: none !important; }
+        [data-testid="stStatusWidget"] { display: none !important; }
+        .stDeployButton { display: none !important; }
+        #MainMenu { display: none !important; }
+
+        .stApp {
+            background: linear-gradient(135deg, #0a0a23 0%, #0d1b2a 25%, #1b2838 50%, #0f3460 75%, #16213e 100%) !important;
+        }
         [data-testid="stAppViewContainer"] {
-            background: linear-gradient(135deg, #0a0a23 0%, #0d1b2a 25%, #1b2838 50%, #0f3460 75%, #16213e 100%);
-            background-attachment: fixed;
+            background: transparent !important;
         }
         [data-testid="stMain"] {
-            background: transparent;
+            background: transparent !important;
         }
         .block-container {
-            padding-top: 0 !important;
+            padding-top: 2rem !important;
             max-width: 100% !important;
-            background: transparent;
+            background: transparent !important;
         }
-        /* Remove default white background from all containers */
-        .stApp, [data-testid="stAppViewContainer"] > section {
-            background: transparent;
+        [data-testid="stAppViewContainer"] > section,
+        [data-testid="stAppViewContainer"] > section > div {
+            background: transparent !important;
         }
 
         /* Animated background particles effect */
@@ -113,35 +121,17 @@ def render_login_page():
 
         /* GLASS CARD FRAME */
         .login-card {
-            background: rgba(255, 255, 255, 0.04);
-            backdrop-filter: blur(24px);
-            -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(13, 27, 42, 0.85);
+            border: 1px solid rgba(59, 130, 246, 0.15);
             border-radius: 28px;
             padding: 3rem 2.5rem 2rem;
             max-width: 440px;
             margin: 0 auto;
             box-shadow:
-                0 30px 80px rgba(0, 0, 0, 0.6),
-                0 0 60px rgba(59, 130, 246, 0.08),
-                inset 0 1px 0 rgba(255, 255, 255, 0.06);
+                0 30px 80px rgba(0, 0, 0, 0.5),
+                0 0 40px rgba(59, 130, 246, 0.06);
             position: relative;
             z-index: 1;
-        }
-
-        /* Glowing border animation */
-        .login-card::before {
-            content: '';
-            position: absolute;
-            top: -1px; left: -1px; right: -1px; bottom: -1px;
-            border-radius: 28px;
-            background: linear-gradient(135deg, rgba(59,130,246,0.3), transparent 40%, transparent 60%, rgba(139,92,246,0.3));
-            z-index: -1;
-            animation: border-glow 4s ease-in-out infinite alternate;
-        }
-        @keyframes border-glow {
-            0% { opacity: 0.5; }
-            100% { opacity: 1; }
         }
 
         /* Animated Shield Logo */
