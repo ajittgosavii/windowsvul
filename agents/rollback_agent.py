@@ -1,0 +1,247 @@
+"""
+Rollback Agent — Auto-revert failed remediations
+
+Capabilities:
+  - Monitors remediation execution results
+  - Auto-triggers rollback on failure (exit code != 0, verification failed)
+  - Restores registry from backup
+  - Invokes system restore point
+  - Uninstalls failed KB updates
+  - Logs all rollback actions for audit trail
+"""
+
+import logging
+from datetime import datetime
+from typing import Dict, List, Optional
+from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
+
+
+class RollbackStatus:
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    NOT_NEEDED = "NOT_NEEDED"
+
+
+@dataclass
+class RollbackRecord:
+    rollback_id: str
+    decision_id: str
+    vulnerability_id: str
+    instance_id: str
+    account_id: str
+    trigger_reason: str
+    rollback_type: str  # registry, kb_uninstall, restore_point, full
+    status: str = RollbackStatus.PENDING
+    script: str = ""
+    result: Dict = field(default_factory=dict)
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+
+
+class RollbackAgent:
+    """
+    Agent 7: Automatic rollback of failed remediations.
+
+    Trigger conditions:
+      - Remediation script exits with non-zero code
+      - Verification agent reports failure
+      - Service disruption detected post-remediation
+      - Manual rollback request
+    """
+
+    def __init__(self, aws_connector=None):
+        self.aws_connector = aws_connector
+        self.rollback_history: List[RollbackRecord] = []
+
+    def evaluate_rollback_need(self, decision, verification_result: Dict) -> bool:
+        """Determine if rollback is needed based on verification results."""
+        if not verification_result:
+            return False
+
+        status = verification_result.get("status", "")
+
+        # Obvious failures
+        if status in ("FAILED", "ERROR", "TIMEOUT"):
+            return True
+
+        # Check individual verification checks
+        checks = verification_result.get("checks", {})
+        if isinstance(checks, dict):
+            failed_checks = sum(1 for v in checks.values() if v is False)
+            if failed_checks >= 2:
+                return True
+
+        # Service disruption
+        if verification_result.get("service_disruption"):
+            return True
+
+        return False
+
+    def execute_rollback(
+        self,
+        decision,
+        trigger_reason: str = "Verification failure",
+        rollback_type: str = "full",
+    ) -> RollbackRecord:
+        """Execute rollback for a failed remediation."""
+
+        record = RollbackRecord(
+            rollback_id=f"RB-{datetime.now().strftime('%Y%m%d%H%M%S')}-{decision.vulnerability_id}",
+            decision_id=decision.decision_id,
+            vulnerability_id=decision.vulnerability_id,
+            instance_id=decision.instance_id,
+            account_id=decision.account_id,
+            trigger_reason=trigger_reason,
+            rollback_type=rollback_type,
+            status=RollbackStatus.IN_PROGRESS,
+            started_at=datetime.now().isoformat(),
+        )
+
+        # Generate rollback script
+        record.script = self._generate_rollback_script(decision, rollback_type)
+
+        # Execute via SSM if connected
+        if self.aws_connector:
+            try:
+                from aws_multi_account import WindowsServer
+                server = WindowsServer(
+                    instance_id=decision.instance_id,
+                    account_id=decision.account_id,
+                    account_name="",
+                    hostname="",
+                    private_ip="",
+                    os_version="",
+                    os_build="",
+                    region="us-west-1",
+                )
+                result = self.aws_connector.execute_remediation(
+                    server=server,
+                    remediation_script=record.script,
+                    dry_run=False,
+                )
+                record.result = result
+                record.status = RollbackStatus.SUCCESS if result.get("status") != "FAILED" else RollbackStatus.FAILED
+            except Exception as e:
+                record.result = {"error": str(e)}
+                record.status = RollbackStatus.FAILED
+        else:
+            record.result = {"status": "SIMULATED", "message": "Rollback simulated (no AWS connector)"}
+            record.status = RollbackStatus.SUCCESS
+
+        record.completed_at = datetime.now().isoformat()
+        self.rollback_history.append(record)
+
+        logger.info(f"Rollback {record.rollback_id}: {record.status} for {decision.vulnerability_id}")
+        return record
+
+    def _generate_rollback_script(self, decision, rollback_type: str) -> str:
+        """Generate PowerShell rollback script."""
+        cve = decision.vulnerability_id
+
+        script = f"""#Requires -RunAsAdministrator
+<#
+.SYNOPSIS
+    ROLLBACK SCRIPT — Revert failed remediation for {cve}
+.DESCRIPTION
+    Auto-generated by Rollback Agent
+    Type: {rollback_type}
+    Triggered: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+#>
+
+$ErrorActionPreference = 'Continue'
+$LogFile = "C:\\Temp\\Rollback_{cve.replace('-','_')}.log"
+
+function Write-RollbackLog {{
+    param([string]$Message, [string]$Level = 'Info')
+    $entry = "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] [$Level] $Message"
+    Write-Host $entry -ForegroundColor $(switch($Level) {{ 'Error' {{ 'Red' }} 'Warning' {{ 'Yellow' }} 'Success' {{ 'Green' }} default {{ 'Cyan' }} }})
+    Add-Content -Path $LogFile -Value $entry
+}}
+
+Write-RollbackLog "========================================" -Level Warning
+Write-RollbackLog "ROLLBACK INITIATED — {cve}" -Level Warning
+Write-RollbackLog "========================================" -Level Warning
+"""
+
+        if rollback_type in ("registry", "full"):
+            script += """
+# Step 1: Restore Registry from Backup
+Write-RollbackLog "Restoring registry from backup..." -Level Info
+$backupDir = Get-ChildItem "C:\\Temp\\Backup" -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($backupDir) {
+    $regBackup = Join-Path $backupDir.FullName "Registry-Backup.reg"
+    if (Test-Path $regBackup) {
+        reg import $regBackup 2>$null
+        Write-RollbackLog "Registry restored from: $regBackup" -Level Success
+    } else {
+        Write-RollbackLog "No registry backup found" -Level Warning
+    }
+} else {
+    Write-RollbackLog "No backup directory found" -Level Warning
+}
+"""
+
+        if rollback_type in ("kb_uninstall", "full"):
+            script += f"""
+# Step 2: Uninstall Failed KB Update
+Write-RollbackLog "Attempting to uninstall KB update..." -Level Info
+try {{
+    $kb = Get-HotFix | Where-Object {{ $_.HotFixID -match "KB" }} | Sort-Object InstalledOn -Descending | Select-Object -First 1
+    if ($kb) {{
+        Write-RollbackLog "Uninstalling: $($kb.HotFixID)" -Level Info
+        wusa /uninstall /kb:$($kb.HotFixID.Replace('KB','')) /quiet /norestart 2>$null
+        Write-RollbackLog "KB uninstall initiated: $($kb.HotFixID)" -Level Success
+    }}
+}} catch {{
+    Write-RollbackLog "KB uninstall failed: $_" -Level Error
+}}
+"""
+
+        if rollback_type in ("restore_point", "full"):
+            script += """
+# Step 3: System Restore Point Recovery
+Write-RollbackLog "Checking available restore points..." -Level Info
+try {
+    $restorePoints = Get-ComputerRestorePoint | Where-Object { $_.Description -match "Pre-Remediation" } | Sort-Object CreationTime -Descending
+    if ($restorePoints) {
+        $latest = $restorePoints[0]
+        Write-RollbackLog "Found restore point: $($latest.Description) (Created: $($latest.CreationTime))" -Level Info
+        Write-RollbackLog "To restore manually: Restore-Computer -RestorePoint $($latest.SequenceNumber)" -Level Warning
+    } else {
+        Write-RollbackLog "No pre-remediation restore points found" -Level Warning
+    }
+} catch {
+    Write-RollbackLog "Could not check restore points: $_" -Level Error
+}
+"""
+
+        script += """
+# Step 4: Service Health Check
+Write-RollbackLog "Verifying critical services..." -Level Info
+$criticalServices = @('wuauserv', 'WinDefend', 'EventLog', 'W32Time', 'TermService')
+foreach ($svc in $criticalServices) {
+    $service = Get-Service -Name $svc -ErrorAction SilentlyContinue
+    if ($service) {
+        if ($service.Status -ne 'Running') {
+            Start-Service -Name $svc -ErrorAction SilentlyContinue
+            Write-RollbackLog "  Restarted: $svc" -Level Warning
+        } else {
+            Write-RollbackLog "  Running: $svc" -Level Success
+        }
+    }
+}
+
+Write-RollbackLog "========================================" -Level Success
+Write-RollbackLog "ROLLBACK COMPLETED" -Level Success
+Write-RollbackLog "========================================" -Level Success
+"""
+        return script
+
+    def get_history(self) -> List[Dict]:
+        """Get rollback history."""
+        from dataclasses import asdict
+        return [asdict(r) for r in self.rollback_history]

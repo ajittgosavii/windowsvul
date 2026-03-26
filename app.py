@@ -66,42 +66,93 @@ if "authenticated" not in st.session_state:
     st.session_state["user_info"] = {}
 
 def render_login_page():
-    """Render professional SSO login page with animated shield logo."""
+    """Render professional SSO login page with animated shield logo and dark frame."""
     st.markdown("""
     <style>
-        /* Hide default streamlit elements on login */
-        [data-testid="stSidebar"] { display: none; }
-        header[data-testid="stHeader"] { display: none; }
-        .block-container { padding-top: 0 !important; max-width: 100% !important; }
-
-        .login-page {
-            min-height: 100vh;
-            background: linear-gradient(135deg, #0a0a23 0%, #1a1a3e 35%, #0f3460 65%, #16213e 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 2rem;
+        /* FULL PAGE DARK BACKGROUND */
+        [data-testid="stSidebar"] { display: none !important; }
+        header[data-testid="stHeader"] { display: none !important; }
+        [data-testid="stAppViewContainer"] {
+            background: linear-gradient(135deg, #0a0a23 0%, #0d1b2a 25%, #1b2838 50%, #0f3460 75%, #16213e 100%);
+            background-attachment: fixed;
+        }
+        [data-testid="stMain"] {
+            background: transparent;
+        }
+        .block-container {
+            padding-top: 0 !important;
+            max-width: 100% !important;
+            background: transparent;
+        }
+        /* Remove default white background from all containers */
+        .stApp, [data-testid="stAppViewContainer"] > section {
+            background: transparent;
         }
 
-        .login-container {
-            background: rgba(255, 255, 255, 0.06);
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 24px;
-            padding: 3rem 2.5rem;
-            width: 420px;
-            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+        /* Animated background particles effect */
+        [data-testid="stAppViewContainer"]::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                radial-gradient(2px 2px at 20% 30%, rgba(59,130,246,0.15), transparent),
+                radial-gradient(2px 2px at 40% 70%, rgba(139,92,246,0.1), transparent),
+                radial-gradient(2px 2px at 60% 40%, rgba(59,130,246,0.12), transparent),
+                radial-gradient(2px 2px at 80% 80%, rgba(139,92,246,0.08), transparent),
+                radial-gradient(1px 1px at 10% 90%, rgba(96,165,250,0.15), transparent),
+                radial-gradient(1px 1px at 70% 20%, rgba(96,165,250,0.1), transparent),
+                radial-gradient(1px 1px at 90% 60%, rgba(139,92,246,0.12), transparent);
+            animation: twinkle 8s ease-in-out infinite alternate;
+            pointer-events: none;
+            z-index: 0;
+        }
+        @keyframes twinkle {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        /* GLASS CARD FRAME */
+        .login-card {
+            background: rgba(255, 255, 255, 0.04);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 28px;
+            padding: 3rem 2.5rem 2rem;
+            max-width: 440px;
+            margin: 0 auto;
+            box-shadow:
+                0 30px 80px rgba(0, 0, 0, 0.6),
+                0 0 60px rgba(59, 130, 246, 0.08),
+                inset 0 1px 0 rgba(255, 255, 255, 0.06);
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Glowing border animation */
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: -1px; left: -1px; right: -1px; bottom: -1px;
+            border-radius: 28px;
+            background: linear-gradient(135deg, rgba(59,130,246,0.3), transparent 40%, transparent 60%, rgba(139,92,246,0.3));
+            z-index: -1;
+            animation: border-glow 4s ease-in-out infinite alternate;
+        }
+        @keyframes border-glow {
+            0% { opacity: 0.5; }
+            100% { opacity: 1; }
         }
 
         /* Animated Shield Logo */
         .logo-container {
             text-align: center;
-            margin-bottom: 2rem;
+            margin-bottom: 1.5rem;
         }
 
         .shield-logo {
-            width: 80px;
-            height: 80px;
+            width: 90px;
+            height: 90px;
             margin: 0 auto 1rem;
             position: relative;
             animation: float 3s ease-in-out infinite;
@@ -115,64 +166,102 @@ def render_login_page():
         .shield-logo svg {
             width: 100%;
             height: 100%;
-            filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.5));
+            filter: drop-shadow(0 0 25px rgba(59, 130, 246, 0.6));
         }
 
-        /* Pulse ring around logo */
-        .shield-logo::before {
+        /* Double pulse ring */
+        .shield-logo::before, .shield-logo::after {
             content: '';
             position: absolute;
-            top: -10px;
-            left: -10px;
-            right: -10px;
-            bottom: -10px;
+            top: -12px; left: -12px; right: -12px; bottom: -12px;
             border-radius: 50%;
-            border: 2px solid rgba(59, 130, 246, 0.3);
+            border: 2px solid rgba(59, 130, 246, 0.25);
+        }
+        .shield-logo::before {
             animation: pulse-ring 2s ease-out infinite;
         }
-
+        .shield-logo::after {
+            animation: pulse-ring 2s ease-out infinite 1s;
+        }
         @keyframes pulse-ring {
             0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(1.3); opacity: 0; }
+            100% { transform: scale(1.4); opacity: 0; }
         }
 
         .logo-title {
             color: white;
-            font-size: 1.5rem;
+            font-size: 1.6rem;
             font-weight: 700;
             letter-spacing: -0.5px;
             margin: 0;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
 
         .logo-subtitle {
-            color: rgba(168, 178, 209, 0.9);
-            font-size: 0.85rem;
-            margin-top: 0.3rem;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-        }
-
-        /* Scanning line animation */
-        .scan-line {
-            width: 100%;
-            height: 2px;
-            background: linear-gradient(90deg, transparent, #3b82f6, transparent);
-            margin: 1.5rem 0;
-            animation: scan 2s ease-in-out infinite;
-        }
-
-        @keyframes scan {
-            0% { opacity: 0.3; transform: scaleX(0.5); }
-            50% { opacity: 1; transform: scaleX(1); }
-            100% { opacity: 0.3; transform: scaleX(0.5); }
-        }
-
-        .login-label {
-            color: rgba(168, 178, 209, 0.8);
+            color: rgba(168, 178, 209, 0.85);
             font-size: 0.8rem;
+            margin-top: 0.4rem;
+            letter-spacing: 3px;
             text-transform: uppercase;
-            letter-spacing: 1px;
+        }
+
+        /* Scanning line */
+        .scan-line {
+            width: 80%;
+            height: 2px;
+            margin: 1.5rem auto;
+            background: linear-gradient(90deg, transparent, #3b82f6, #8b5cf6, #3b82f6, transparent);
+            background-size: 200% 100%;
+            animation: scan-move 3s linear infinite;
+            border-radius: 2px;
+        }
+        @keyframes scan-move {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* Labels */
+        .login-label {
+            color: rgba(168, 178, 209, 0.7);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
             margin-bottom: 0.3rem;
+            font-weight: 500;
+        }
+
+        /* Override Streamlit inputs for dark theme */
+        .stTextInput > div > div > input {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 12px !important;
+            color: white !important;
+            padding: 0.7rem 1rem !important;
+        }
+        .stTextInput > div > div > input:focus {
+            border-color: rgba(59, 130, 246, 0.5) !important;
+            box-shadow: 0 0 15px rgba(59, 130, 246, 0.15) !important;
+        }
+        .stTextInput > div > div > input::placeholder {
+            color: rgba(168, 178, 209, 0.4) !important;
+        }
+
+        /* Sign In button */
+        .stFormSubmitButton > button {
+            background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%) !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 12px !important;
+            padding: 0.7rem !important;
+            font-weight: 600 !important;
+            font-size: 0.95rem !important;
+            letter-spacing: 0.5px !important;
+            transition: all 0.3s ease !important;
+            box-shadow: 0 4px 20px rgba(59, 130, 246, 0.3) !important;
+        }
+        .stFormSubmitButton > button:hover {
+            transform: translateY(-2px) !important;
+            box-shadow: 0 8px 30px rgba(59, 130, 246, 0.5) !important;
         }
 
         /* SSO badge */
@@ -180,40 +269,55 @@ def render_login_page():
             text-align: center;
             margin-top: 1.5rem;
         }
-
         .sso-badge span {
-            background: rgba(59, 130, 246, 0.15);
+            background: rgba(59, 130, 246, 0.1);
             color: #60a5fa;
-            padding: 4px 16px;
+            padding: 5px 18px;
             border-radius: 20px;
-            font-size: 0.75rem;
-            letter-spacing: 1px;
-            border: 1px solid rgba(59, 130, 246, 0.3);
+            font-size: 0.7rem;
+            letter-spacing: 1.5px;
+            border: 1px solid rgba(59, 130, 246, 0.2);
+            font-weight: 500;
         }
 
+        /* Footer */
         .login-footer {
             text-align: center;
-            color: rgba(168, 178, 209, 0.5);
+            color: rgba(168, 178, 209, 0.35);
             font-size: 0.7rem;
             margin-top: 2rem;
+            line-height: 1.6;
         }
 
-        /* Override streamlit input styling inside login */
-        .login-form .stTextInput > div > div {
-            background: rgba(255, 255, 255, 0.08) !important;
-            border: 1px solid rgba(255, 255, 255, 0.15) !important;
-            border-radius: 12px !important;
-            color: white !important;
+        /* Agent badges row */
+        .agent-badges {
+            display: flex;
+            justify-content: center;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 0.8rem;
+        }
+        .agent-badge {
+            background: rgba(59, 130, 246, 0.08);
+            color: rgba(168, 178, 209, 0.5);
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-size: 0.6rem;
+            letter-spacing: 0.5px;
         }
     </style>
     """, unsafe_allow_html=True)
 
-    # Center the login form
-    col_pad1, col_login, col_pad2 = st.columns([1, 1, 1])
+    # Center the login form with spacers
+    st.markdown("<div style='height: 3vh;'></div>", unsafe_allow_html=True)
+
+    col_pad1, col_login, col_pad2 = st.columns([1.2, 1, 1.2])
 
     with col_login:
+        # Glass card wrapper opens
+        st.markdown('<div class="login-card">', unsafe_allow_html=True)
+
         st.markdown("""
-        <div style="text-align: center; padding-top: 3rem;">
             <div class="logo-container">
                 <div class="shield-logo">
                     <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -222,20 +326,26 @@ def render_login_page():
                                 <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:1" />
                                 <stop offset="100%" style="stop-color:#8b5cf6;stop-opacity:1" />
                             </linearGradient>
+                            <filter id="glow">
+                                <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                                <feMerge>
+                                    <feMergeNode in="coloredBlur"/>
+                                    <feMergeNode in="SourceGraphic"/>
+                                </feMerge>
+                            </filter>
                         </defs>
                         <path d="M50 5 L90 25 L90 50 C90 75 70 92 50 98 C30 92 10 75 10 50 L10 25 Z"
-                              fill="url(#shieldGrad)" opacity="0.9"/>
+                              fill="url(#shieldGrad)" opacity="0.9" filter="url(#glow)"/>
                         <path d="M50 15 L80 30 L80 50 C80 70 65 83 50 88 C35 83 20 70 20 50 L20 30 Z"
-                              fill="rgba(10,10,35,0.5)"/>
-                        <path d="M42 50 L48 56 L60 40" stroke="#3b82f6" stroke-width="4" fill="none"
-                              stroke-linecap="round" stroke-linejoin="round"/>
+                              fill="rgba(10,10,35,0.6)"/>
+                        <path d="M42 50 L48 56 L60 40" stroke="white" stroke-width="4" fill="none"
+                              stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
                     </svg>
                 </div>
                 <p class="logo-title">VulnShield AI</p>
                 <p class="logo-subtitle">Enterprise Security Platform</p>
+                <div class="scan-line"></div>
             </div>
-            <div class="scan-line"></div>
-        </div>
         """, unsafe_allow_html=True)
 
         # Login form
@@ -260,12 +370,19 @@ def render_login_page():
                     st.error("Invalid credentials. Try: demo / demo")
 
         st.markdown("""
-        <div class="sso-badge"><span>SSO ENTERPRISE AUTH</span></div>
-        <div class="login-footer">
-            Agentic AI Windows Vulnerability Management v3.0<br>
-            Powered by Claude AI | Multi-Account AWS | ServiceNow ITSM
+            <div class="sso-badge"><span>SSO ENTERPRISE AUTH</span></div>
+            <div class="agent-badges">
+                <span class="agent-badge">12 AI Agents</span>
+                <span class="agent-badge">200+ AWS Accounts</span>
+                <span class="agent-badge">NIST/CIS</span>
+                <span class="agent-badge">ServiceNow</span>
+            </div>
+            <div class="login-footer">
+                Agentic AI Windows Vulnerability Management v3.0<br>
+                Powered by Claude AI &bull; Multi-Account AWS &bull; ServiceNow ITSM
+            </div>
         </div>
-        """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)  # closes login-card div
 
 # Check authentication
 if not st.session_state["authenticated"]:
