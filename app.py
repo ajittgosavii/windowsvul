@@ -677,6 +677,37 @@ SAMPLE_VULNERABILITIES = [
 
 
 # ==================== SIDEBAR ====================
+# ==================== SECRETS (from st.secrets / .streamlit/secrets.toml) ====================
+# All credentials are loaded from Streamlit secrets — never shown in the UI
+_secrets = st.secrets if hasattr(st, "secrets") and len(st.secrets) > 0 else {}
+
+api_key = _secrets.get("ANTHROPIC_API_KEY", "")
+aws_access_key = _secrets.get("AWS_ACCESS_KEY_ID", "")
+aws_secret_key = _secrets.get("AWS_SECRET_ACCESS_KEY", "")
+mgmt_account = _secrets.get("AWS_MANAGEMENT_ACCOUNT", "448549863273")
+snow_url = _secrets.get("SERVICENOW_URL", "https://dev218436.service-now.com")
+snow_user = _secrets.get("SERVICENOW_USER", "admin")
+snow_pass = _secrets.get("SERVICENOW_PASSWORD", "")
+
+# Initialize clients from secrets
+agent = VulnerabilityAgent(api_key=api_key if api_key else None)
+
+# Auto-connect ServiceNow if secrets are present
+if snow_pass and not st.session_state.get("snow_client"):
+    st.session_state["snow_client"] = create_servicenow_client(snow_url, snow_user, snow_pass)
+
+# ==================== SIDEBAR ====================
+
+# Hub-and-spoke account registry (configurable)
+ACCOUNT_REGISTRY = {
+    "448549863273": {"name": "Splunk COE / Primary", "ou": "Production", "regions": ["us-east-1", "us-west-1", "us-east-2"], "role": "Hub", "enabled": True},
+    "950766978386": {"name": "Cloud Migration", "ou": "Production", "regions": ["us-west-1"], "role": "Spoke", "enabled": True},
+    "123456789012": {"name": "Finance Production", "ou": "Production/Finance", "regions": ["us-east-1"], "role": "Spoke", "enabled": True},
+    "234567890123": {"name": "HR Systems", "ou": "Production/HR", "regions": ["us-east-1"], "role": "Spoke", "enabled": True},
+    "345678901234": {"name": "ERP Platform", "ou": "Production/ERP", "regions": ["eu-west-1"], "role": "Spoke", "enabled": True},
+    "456789012345": {"name": "DevTest Environment", "ou": "Non-Production/Dev", "regions": ["us-west-2"], "role": "Spoke", "enabled": True},
+}
+
 with st.sidebar:
     # User info & logout
     user = st.session_state.get("user_info", {})
@@ -688,26 +719,50 @@ with st.sidebar:
         st.rerun()
 
     st.divider()
-    st.markdown("## 🛡️ Enterprise Configuration")
 
-    # API Key
-    api_key = st.text_input("Anthropic API Key", type="password", help="Enables Claude AI agent", key="api_key")
-    agent = VulnerabilityAgent(api_key=api_key if api_key else None)
-    if api_key:
-        st.success("Claude AI active")
-    else:
-        st.info("Rule-based mode")
+    # Connection status indicators
+    st.markdown("## 🛡️ Connections")
+    cs1, cs2, cs3 = st.columns(3)
+    cs1.markdown(f"{'🟢' if api_key else '⚪'} **AI**")
+    cs2.markdown(f"{'🟢' if aws_access_key else '⚪'} **AWS**")
+    cs3.markdown(f"{'🟢' if snow_pass else '⚪'} **ITSM**")
 
     st.divider()
 
-    # AWS Configuration
-    st.markdown("### AWS Multi-Account")
-    mgmt_account = st.text_input("Management Account ID", value="448549863273", key="mgmt_acct")
-    aws_region = st.selectbox("Home Region", ["us-west-1", "us-east-1", "eu-west-1", "ap-southeast-1"], key="aws_region")
-    aws_access_key = st.text_input("AWS Access Key", type="password", key="aws_ak")
-    aws_secret_key = st.text_input("AWS Secret Key", type="password", key="aws_sk")
+    # ==================== HUB & SPOKE MULTI-ACCOUNT ====================
+    st.markdown("## 🌐 Multi-Account (Hub & Spoke)")
 
-    if st.button("Connect AWS", use_container_width=True, key="connect_aws"):
+    # Hub account (management)
+    st.markdown(f"**Hub Account:** `{mgmt_account}`")
+    st.caption("Central management — scans all spoke accounts via AssumeRole")
+
+    # Spoke account selector
+    st.markdown("#### Spoke Accounts")
+
+    if "selected_accounts" not in st.session_state:
+        st.session_state["selected_accounts"] = list(ACCOUNT_REGISTRY.keys())
+
+    select_all = st.checkbox("Select All Accounts", value=True, key="select_all_accts")
+
+    selected_accounts = []
+    for acct_id, info in ACCOUNT_REGISTRY.items():
+        role_icon = "🔵" if info["role"] == "Hub" else "🟢"
+        is_selected = st.checkbox(
+            f"{role_icon} {info['name']} ({acct_id})",
+            value=select_all or acct_id in st.session_state["selected_accounts"],
+            key=f"acct_{acct_id}",
+            help=f"OU: {info['ou']} | Regions: {', '.join(info['regions'])}",
+        )
+        if is_selected:
+            selected_accounts.append(acct_id)
+
+    st.session_state["selected_accounts"] = selected_accounts
+    st.caption(f"{len(selected_accounts)} of {len(ACCOUNT_REGISTRY)} accounts selected")
+
+    # Connect button
+    aws_region = "us-west-1"  # Default hub region
+
+    if st.button("🔗 Connect Selected Accounts", use_container_width=True, type="primary", key="connect_aws"):
         connector = AWSMultiAccountConnector(
             management_account_id=mgmt_account,
             home_region=aws_region,
@@ -716,6 +771,8 @@ with st.sidebar:
         )
         st.session_state["aws_connector"] = connector
         accounts = connector.discover_accounts()
+        # Filter to selected
+        accounts = [a for a in accounts if a.account_id in selected_accounts]
         st.session_state["accounts"] = accounts
         servers = connector.discover_all_servers(accounts)
         st.session_state["servers"] = servers
@@ -723,25 +780,8 @@ with st.sidebar:
 
     st.divider()
 
-    # ServiceNow Configuration
-    st.markdown("### ServiceNow ITSM")
-    snow_url = st.text_input("Instance URL", value="https://dev218436.service-now.com", key="snow_url")
-    snow_user = st.text_input("Username", value="admin", key="snow_user")
-    snow_pass = st.text_input("Password", type="password", key="snow_pass")
-
-    if st.button("Connect ServiceNow", use_container_width=True, key="connect_snow"):
-        snow = create_servicenow_client(snow_url, snow_user, snow_pass)
-        result = snow.test_connection()
-        st.session_state["snow_client"] = snow
-        if result["status"] in ("CONNECTED", "SIMULATED"):
-            st.success(f"ServiceNow: {result['status']}")
-        else:
-            st.error(f"ServiceNow: {result.get('message', result['status'])}")
-
-    st.divider()
-
-    # Pipeline Configuration
-    st.markdown("### AI Pipeline Thresholds")
+    # ==================== PIPELINE CONFIG ====================
+    st.markdown("### ⚡ AI Pipeline")
     auto_threshold = st.slider("Auto-Remediate (>=)", 0.5, 1.0, 0.90, 0.05, key="auto_thresh")
     human_threshold = st.slider("Human Approve (>=)", 0.3, 0.95, 0.70, 0.05, key="human_thresh")
     max_auto_hour = st.number_input("Max Auto/Hour", 1, 200, 50, key="max_auto")
@@ -749,7 +789,7 @@ with st.sidebar:
     require_restore = st.checkbox("Require Restore Point", value=True, key="restore")
 
     st.divider()
-    st.caption("v3.0 Enterprise | Agentic AI Engine")
+    st.caption("v3.0 Enterprise | 12 AI Agents")
 
 
 # ==================== INITIALIZE PIPELINE ====================
