@@ -711,6 +711,9 @@ ACCOUNT_REGISTRY = {
 with st.sidebar:
     # ==================== DATA MODE TOGGLE — TOP OF SIDEBAR ====================
     tog_col1, tog_col2 = st.columns([1, 1])
+    # Track previous mode to detect changes
+    _prev_mode = st.session_state.get("_prev_data_mode", None)
+
     with tog_col1:
         data_mode = st.toggle("Live AWS", value=False, key="data_mode_toggle")
     with tog_col2:
@@ -718,6 +721,13 @@ with st.sidebar:
             st.markdown("🟢 **LIVE**")
         else:
             st.markdown("🔵 **DEMO**")
+
+    # Clear cached data when toggle changes so it re-fetches
+    if _prev_mode is not None and _prev_mode != data_mode:
+        st.session_state["accounts"] = []
+        st.session_state["servers"] = []
+        st.session_state["aws_connector"] = None
+    st.session_state["_prev_data_mode"] = data_mode
 
     # User info & logout (compact)
     user = st.session_state.get("user_info", {})
@@ -873,26 +883,61 @@ st.markdown(f"""
 def is_live_mode() -> bool:
     return st.session_state.get("data_mode_toggle", False)
 
+def _ensure_connector() -> AWSMultiAccountConnector:
+    """Get or create the AWS connector."""
+    if not st.session_state.get("aws_connector"):
+        st.session_state["aws_connector"] = AWSMultiAccountConnector(
+            management_account_id=mgmt_account,
+            home_region="us-west-1",
+            aws_access_key=aws_access_key if aws_access_key else None,
+            aws_secret_key=aws_secret_key if aws_secret_key else None,
+        )
+    return st.session_state["aws_connector"]
+
 def get_accounts():
     if st.session_state["accounts"]:
         return st.session_state["accounts"]
-    # Auto-load demo data when in demo mode (or no connection yet)
-    connector = AWSMultiAccountConnector(management_account_id=mgmt_account)
+
+    connector = _ensure_connector()
+
+    if is_live_mode() and aws_access_key:
+        # LIVE: real AWS Organizations / EC2 discovery
+        try:
+            accounts = connector.discover_accounts()
+            sel = st.session_state.get("selected_accounts", [])
+            if sel:
+                accounts = [a for a in accounts if a.account_id in sel]
+            st.session_state["accounts"] = accounts
+            return accounts
+        except Exception:
+            pass  # Fall through to demo
+
+    # DEMO: simulated accounts
     accounts = connector._get_fallback_accounts()
     st.session_state["accounts"] = accounts
-    st.session_state["aws_connector"] = connector
     return accounts
 
 def get_servers():
     if st.session_state["servers"]:
         return st.session_state["servers"]
-    connector = st.session_state.get("aws_connector") or AWSMultiAccountConnector(management_account_id=mgmt_account)
+
+    connector = _ensure_connector()
     accounts = get_accounts()
+
+    if is_live_mode() and aws_access_key:
+        # LIVE: real SSM / EC2 discovery
+        try:
+            servers = connector.discover_all_servers(accounts)
+            st.session_state["servers"] = servers
+            return servers
+        except Exception:
+            pass  # Fall through to demo
+
+    # DEMO: simulated servers
     servers = []
     for acct in accounts:
         servers.extend(connector._get_demo_servers(acct))
     st.session_state["servers"] = servers
-    st.session_state["aws_connector"] = connector
     return servers
 
 
