@@ -857,7 +857,7 @@ def get_pipeline() -> AgenticPipeline:
 # ==================== HEADER ====================
 _mode_badge = (
     '<span style="background:#28a745;color:white;padding:2px 10px;border-radius:10px;font-size:0.7rem;margin-left:0.8rem;vertical-align:middle;">LIVE</span>'
-    if is_live_mode() else
+    if st.session_state.get("data_mode_toggle", False) else
     '<span style="background:#6c757d;color:white;padding:2px 10px;border-radius:10px;font-size:0.7rem;margin-left:0.8rem;vertical-align:middle;">DEMO</span>'
 )
 st.markdown(f"""
