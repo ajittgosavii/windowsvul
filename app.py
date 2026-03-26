@@ -496,7 +496,7 @@ and accounts are affected. Format output in markdown."""
         self.openai_client = None
         self.provider = None
 
-        # Priority: Anthropic first, then OpenAI
+        # Initialize BOTH clients — fallback chain: Claude → OpenAI → rule-based
         if api_key:
             try:
                 import anthropic
@@ -505,25 +505,34 @@ and accounts are affected. Format output in markdown."""
             except ImportError:
                 pass
 
-        if not self.client and openai_key:
+        if openai_key:
             try:
                 from openai import OpenAI
                 self.openai_client = OpenAI(api_key=openai_key)
-                self.provider = "openai"
+                if not self.provider:
+                    self.provider = "openai"
+                else:
+                    self.provider = "claude+openai"  # Both available
             except ImportError:
                 pass
 
     def analyze(self, prompt: str, context: str = "") -> str:
         full_prompt = f"Context:\n{context}\n\nUser Query:\n{prompt}" if context else prompt
 
-        if self.provider == "claude" and self.client:
-            return self._call_claude(full_prompt)
-        elif self.provider == "openai" and self.openai_client:
-            return self._call_openai(full_prompt)
-        else:
-            return self._fallback_analysis(prompt)
+        # Try Claude first, then OpenAI, then rule-based
+        if self.client:
+            result = self._call_claude(full_prompt)
+            if result:
+                return result
 
-    def _call_claude(self, prompt: str) -> str:
+        if self.openai_client:
+            result = self._call_openai(full_prompt)
+            if result:
+                return result
+
+        return self._fallback_analysis(prompt)
+
+    def _call_claude(self, prompt: str) -> Optional[str]:
         try:
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
@@ -532,10 +541,10 @@ and accounts are affected. Format output in markdown."""
                 messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text
-        except Exception as e:
-            return f"Claude error: {e}\n\n" + self._fallback_analysis(prompt)
+        except Exception:
+            return None  # Fall through to OpenAI
 
-    def _call_openai(self, prompt: str) -> str:
+    def _call_openai(self, prompt: str) -> Optional[str]:
         try:
             response = self.openai_client.chat.completions.create(
                 model="gpt-4o",
@@ -546,8 +555,8 @@ and accounts are affected. Format output in markdown."""
                 ],
             )
             return response.choices[0].message.content
-        except Exception as e:
-            return f"OpenAI error: {e}\n\n" + self._fallback_analysis(prompt)
+        except Exception:
+            return None  # Fall through to rule-based
 
     def _fallback_analysis(self, prompt: str) -> str:
         p = prompt.lower()
@@ -1360,7 +1369,12 @@ with tab_fleet:
 # ==================== TAB: AI AGENT ====================
 with tab_agent:
     st.markdown("#### 🤖 Enterprise AI Security Agent")
-    _provider_label = {"claude": "🟢 Claude AI", "openai": "🟢 OpenAI GPT-4o"}.get(agent.provider, "⚪ Rule-based (no API key)")
+    _provider_labels = {
+        "claude": "🟢 Claude AI",
+        "openai": "🟢 OpenAI GPT-4o",
+        "claude+openai": "🟢 Claude AI → OpenAI GPT-4o (fallback)",
+    }
+    _provider_label = _provider_labels.get(agent.provider, "⚪ Rule-based (no API key)")
     st.caption(f"AI Provider: {_provider_label} | Multi-account analysis, fleet-wide remediation, ITSM coordination")
 
     # Quick actions
