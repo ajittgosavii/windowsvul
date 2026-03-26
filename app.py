@@ -248,20 +248,38 @@ def render_login_page():
             font-weight: 500;
         }
 
-        /* Override Streamlit inputs for dark theme */
-        .stTextInput > div > div > input {
-            background: rgba(255, 255, 255, 0.06) !important;
-            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        /* Override Streamlit inputs for dark theme — aggressive selectors */
+        input, .stTextInput input, .stTextInput > div > div > input,
+        [data-testid="stTextInput"] input,
+        input[type="text"], input[type="password"] {
+            background: #0d1b2a !important;
+            background-color: #0d1b2a !important;
+            border: 1px solid rgba(59, 130, 246, 0.25) !important;
             border-radius: 12px !important;
-            color: white !important;
+            color: #e2e8f0 !important;
+            -webkit-text-fill-color: #e2e8f0 !important;
             padding: 0.7rem 1rem !important;
+            font-size: 0.95rem !important;
+            caret-color: #60a5fa !important;
         }
-        .stTextInput > div > div > input:focus {
+        input:focus, .stTextInput input:focus,
+        input[type="text"]:focus, input[type="password"]:focus {
             border-color: rgba(59, 130, 246, 0.5) !important;
             box-shadow: 0 0 15px rgba(59, 130, 246, 0.15) !important;
+            color: #e2e8f0 !important;
+            -webkit-text-fill-color: #e2e8f0 !important;
         }
-        .stTextInput > div > div > input::placeholder {
-            color: rgba(168, 178, 209, 0.4) !important;
+        input::placeholder, .stTextInput input::placeholder {
+            color: rgba(148, 163, 184, 0.5) !important;
+            -webkit-text-fill-color: rgba(148, 163, 184, 0.5) !important;
+        }
+        /* Autofill override (Chrome turns inputs white on autofill) */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus {
+            -webkit-box-shadow: 0 0 0 30px #0d1b2a inset !important;
+            -webkit-text-fill-color: #e2e8f0 !important;
+            border: 1px solid rgba(59, 130, 246, 0.25) !important;
         }
 
         /* Sign In button */
