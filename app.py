@@ -1327,30 +1327,41 @@ with tab_fleet:
     else:
         st.info("No servers match the selected filters.")
 
-    # OS Distribution chart
+    # Charts
     st.divider()
-    ch1, ch2 = st.columns(2)
+    ch1, ch2, ch3 = st.columns(3)
+
     with ch1:
-        st.markdown("#### OS Version Distribution")
-        os_counts = {}
+        st.markdown("#### Server Status")
+        status_counts = {}
         for s in servers:
-            os_counts[s.os_version] = os_counts.get(s.os_version, 0) + 1
-        if os_counts:
-            st.bar_chart(pd.DataFrame(list(os_counts.items()), columns=["OS Version", "Count"]).set_index("OS Version"))
+            status_counts[s.status] = status_counts.get(s.status, 0) + 1
+        if status_counts:
+            st.bar_chart(pd.DataFrame(list(status_counts.items()), columns=["Status", "Count"]).set_index("Status"))
 
     with ch2:
-        st.markdown("#### Servers by Account")
-        acct_counts = {}
+        st.markdown("#### By Region")
+        region_counts = {}
         for s in servers:
-            acct_counts[s.account_name] = acct_counts.get(s.account_name, 0) + 1
-        if acct_counts:
-            st.bar_chart(pd.DataFrame(list(acct_counts.items()), columns=["Account", "Servers"]).set_index("Account"))
+            region_counts[s.region] = region_counts.get(s.region, 0) + 1
+        if region_counts:
+            st.bar_chart(pd.DataFrame(list(region_counts.items()), columns=["Region", "Count"]).set_index("Region"))
+
+    with ch3:
+        st.markdown("#### By Environment")
+        env_counts = {}
+        for s in servers:
+            env = s.tags.get("Environment", "Unknown")
+            env_counts[env] = env_counts.get(env, 0) + 1
+        if env_counts:
+            st.bar_chart(pd.DataFrame(list(env_counts.items()), columns=["Environment", "Count"]).set_index("Environment"))
 
 
 # ==================== TAB: AI AGENT ====================
 with tab_agent:
     st.markdown("#### 🤖 Enterprise AI Security Agent")
-    st.caption("Multi-account analysis, fleet-wide remediation, ITSM coordination")
+    _provider_label = {"claude": "🟢 Claude AI", "openai": "🟢 OpenAI GPT-4o"}.get(agent.provider, "⚪ Rule-based (no API key)")
+    st.caption(f"AI Provider: {_provider_label} | Multi-account analysis, fleet-wide remediation, ITSM coordination")
 
     # Quick actions
     qa1, qa2, qa3, qa4, qa5 = st.columns(5)
@@ -1395,15 +1406,39 @@ with tab_agent:
 
     if st.session_state["chat_history"] and st.session_state["chat_history"][-1]["role"] == "user":
         last_msg = st.session_state["chat_history"][-1]["content"]
+        _srvs = get_servers()
+        _real_server_details = [
+            {
+                "hostname": s.hostname,
+                "instance_id": s.instance_id,
+                "region": s.region,
+                "os": s.os_version,
+                "status": s.status,
+                "ssm": s.ssm_status,
+                "critical": s.critical_vulns,
+                "high": s.high_vulns,
+                "medium": s.medium_vulns,
+                "compliance": f"{s.patch_compliance:.0%}",
+                "environment": s.tags.get("Environment", "N/A"),
+                "application": s.tags.get("Application", "N/A"),
+            }
+            for s in _srvs
+        ]
         context = json.dumps({
-            "accounts": len(get_accounts()),
-            "servers": len(get_servers()),
+            "data_mode": "LIVE" if is_live_mode() else "DEMO",
+            "management_account": mgmt_account,
+            "total_accounts": len(get_accounts()),
+            "total_servers": len(_srvs),
+            "servers_online": sum(1 for s in _srvs if s.status == "Online"),
+            "servers_with_ssm": sum(1 for s in _srvs if s.ssm_status == "Online"),
+            "total_critical": sum(s.critical_vulns for s in _srvs),
+            "total_high": sum(s.high_vulns for s in _srvs),
             "auto_threshold": auto_threshold,
             "human_threshold": human_threshold,
-            "management_account": mgmt_account,
             "snow_instance": snow_url,
-            "decisions": len(get_pipeline().decisions),
-        })
+            "pipeline_decisions": len(get_pipeline().decisions),
+            "servers": _real_server_details,
+        }, indent=2)
         with st.spinner("AI Agent analyzing..."):
             response = agent.analyze(last_msg, context)
         st.session_state["chat_history"].append({"role": "assistant", "content": response})
