@@ -709,44 +709,26 @@ ACCOUNT_REGISTRY = {
 }
 
 with st.sidebar:
-    # User info & logout
+    # ==================== DATA MODE TOGGLE — TOP OF SIDEBAR ====================
+    tog_col1, tog_col2 = st.columns([1, 1])
+    with tog_col1:
+        data_mode = st.toggle("Live AWS", value=False, key="data_mode_toggle")
+    with tog_col2:
+        if data_mode:
+            st.markdown("🟢 **LIVE**")
+        else:
+            st.markdown("🔵 **DEMO**")
+
+    # User info & logout (compact)
     user = st.session_state.get("user_info", {})
-    st.markdown(f"#### 👤 {user.get('name', 'User')}")
-    st.caption(f"{user.get('role', '')} | {user.get('email', '')}")
-    if st.button("🚪 Sign Out", use_container_width=True, key="logout"):
-        st.session_state["authenticated"] = False
-        st.session_state["user_info"] = {}
-        st.rerun()
-
-    st.divider()
-
-    # ==================== DATA MODE TOGGLE ====================
-    st.markdown("## 🔀 Data Mode")
-    data_mode = st.toggle("Live AWS", value=False, key="data_mode_toggle")
-
-    if data_mode:
-        st.markdown("""
-        <div style="background:#0f3460; color:white; padding:0.5rem 0.8rem; border-radius:8px; font-size:0.8rem;">
-            🟢 <strong>LIVE</strong> — Real AWS API calls via SSM<br>
-            <span style="font-size:0.7rem; opacity:0.7;">Querying account 448549863273</span>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown("""
-        <div style="background:#6c757d; color:white; padding:0.5rem 0.8rem; border-radius:8px; font-size:0.8rem;">
-            🔵 <strong>DEMO</strong> — Simulated data for presentation<br>
-            <span style="font-size:0.7rem; opacity:0.7;">6 accounts, ~60 servers, sample CVEs</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.divider()
-
-    # Connection status indicators
-    st.markdown("## 🛡️ Connections")
-    cs1, cs2, cs3 = st.columns(3)
-    cs1.markdown(f"{'🟢' if api_key else '⚪'} **AI**")
-    cs2.markdown(f"{'🟢' if (aws_access_key and data_mode) else ('🔵' if not data_mode else '⚪')} **AWS**")
-    cs3.markdown(f"{'🟢' if snow_pass else '⚪'} **ITSM**")
+    u_col1, u_col2 = st.columns([2, 1])
+    with u_col1:
+        st.caption(f"👤 {user.get('name', 'User')} | {user.get('role', '')}")
+    with u_col2:
+        if st.button("Sign Out", key="logout", use_container_width=True):
+            st.session_state["authenticated"] = False
+            st.session_state["user_info"] = {}
+            st.rerun()
 
     st.divider()
 
