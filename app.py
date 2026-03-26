@@ -491,29 +491,63 @@ AWS services used: SSM, Inspector, Organizations, STS AssumeRole
 Always respond with structured, actionable advice. Be specific about which servers
 and accounts are affected. Format output in markdown."""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None, openai_key: Optional[str] = None):
         self.client = None
+        self.openai_client = None
+        self.provider = None
+
+        # Priority: Anthropic first, then OpenAI
         if api_key:
             try:
                 import anthropic
                 self.client = anthropic.Anthropic(api_key=api_key)
+                self.provider = "claude"
+            except ImportError:
+                pass
+
+        if not self.client and openai_key:
+            try:
+                from openai import OpenAI
+                self.openai_client = OpenAI(api_key=openai_key)
+                self.provider = "openai"
             except ImportError:
                 pass
 
     def analyze(self, prompt: str, context: str = "") -> str:
-        if not self.client:
+        full_prompt = f"Context:\n{context}\n\nUser Query:\n{prompt}" if context else prompt
+
+        if self.provider == "claude" and self.client:
+            return self._call_claude(full_prompt)
+        elif self.provider == "openai" and self.openai_client:
+            return self._call_openai(full_prompt)
+        else:
             return self._fallback_analysis(prompt)
+
+    def _call_claude(self, prompt: str) -> str:
         try:
-            full_prompt = f"Context:\n{context}\n\nUser Query:\n{prompt}" if context else prompt
             response = self.client.messages.create(
                 model="claude-sonnet-4-20250514",
                 max_tokens=2048,
                 system=self.SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": full_prompt}],
+                messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text
         except Exception as e:
-            return f"AI analysis error: {e}\n\n" + self._fallback_analysis(prompt)
+            return f"Claude error: {e}\n\n" + self._fallback_analysis(prompt)
+
+    def _call_openai(self, prompt: str) -> str:
+        try:
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o",
+                max_tokens=2048,
+                messages=[
+                    {"role": "system", "content": self.SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"OpenAI error: {e}\n\n" + self._fallback_analysis(prompt)
 
     def _fallback_analysis(self, prompt: str) -> str:
         p = prompt.lower()
@@ -682,6 +716,7 @@ SAMPLE_VULNERABILITIES = [
 _secrets = st.secrets if hasattr(st, "secrets") and len(st.secrets) > 0 else {}
 
 api_key = _secrets.get("ANTHROPIC_API_KEY", "")
+openai_key = _secrets.get("OPENAI_API_KEY", "")
 aws_access_key = _secrets.get("AWS_ACCESS_KEY_ID", "")
 aws_secret_key = _secrets.get("AWS_SECRET_ACCESS_KEY", "")
 mgmt_account = _secrets.get("AWS_MANAGEMENT_ACCOUNT", "448549863273")
@@ -689,8 +724,11 @@ snow_url = _secrets.get("SERVICENOW_URL", "https://dev218436.service-now.com")
 snow_user = _secrets.get("SERVICENOW_USER", "admin")
 snow_pass = _secrets.get("SERVICENOW_PASSWORD", "")
 
-# Initialize clients from secrets
-agent = VulnerabilityAgent(api_key=api_key if api_key else None)
+# Initialize clients from secrets (Claude preferred, OpenAI fallback)
+agent = VulnerabilityAgent(
+    api_key=api_key if api_key else None,
+    openai_key=openai_key if openai_key else None,
+)
 
 # Auto-connect ServiceNow if secrets are present
 if snow_pass and not st.session_state.get("snow_client"):
