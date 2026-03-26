@@ -421,24 +421,30 @@ class RemediationAgent:
             include_nist_controls=True,
         )
 
-    def execute(self, decision: AgentDecision, server, dry_run: bool = False) -> Dict:
+    def execute(self, decision: AgentDecision, server=None, dry_run: bool = False) -> Dict:
         """Execute remediation on a remote server."""
-        if not self.aws_connector:
+        if not self.aws_connector or not server:
+            decision.executed_at = datetime.now().isoformat()
+            decision.stage = PipelineStage.REMEDIATION.value
             return {
                 "status": "SIMULATED",
-                "message": "AWS connector not configured — simulation mode",
+                "message": "Remediation simulated (no live server target)",
                 "decision_id": decision.decision_id,
                 "timestamp": datetime.now().isoformat(),
             }
 
-        result = self.aws_connector.execute_remediation(
-            server=server,
-            remediation_script=decision.remediation_script,
-            dry_run=dry_run,
-        )
-        decision.executed_at = datetime.now().isoformat()
-        decision.stage = PipelineStage.REMEDIATION.value
-        return result
+        try:
+            result = self.aws_connector.execute_remediation(
+                server=server,
+                remediation_script=decision.remediation_script,
+                dry_run=dry_run,
+            )
+            decision.executed_at = datetime.now().isoformat()
+            decision.stage = PipelineStage.REMEDIATION.value
+            return result
+        except Exception as e:
+            decision.stage = PipelineStage.REMEDIATION.value
+            return {"status": "FAILED", "error": str(e), "timestamp": datetime.now().isoformat()}
 
 
 # ==================== AGENT: VERIFICATION ====================
