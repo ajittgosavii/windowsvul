@@ -731,9 +731,10 @@ with st.sidebar:
 
     # Refresh button to force re-discovery
     if st.button("🔄 Refresh Data", use_container_width=True, key="refresh_data"):
-        st.session_state["accounts"] = []
-        st.session_state["servers"] = []
-        st.session_state["aws_connector"] = None
+        # Clear ALL cached data
+        for key in ["accounts", "servers", "aws_connector", "pipeline",
+                     "scan_results", "remediation_queue", "decisions"]:
+            st.session_state[key] = [] if key not in ("aws_connector", "pipeline") else None
         st.rerun()
 
     # User info & logout (compact)
@@ -1031,6 +1032,17 @@ def get_servers():
 with tab_dashboard:
     accounts = get_accounts()
     servers = get_servers()
+
+    # Debug info (collapsible) to verify data source
+    with st.expander("🔧 Data Source Debug", expanded=False):
+        _mode = "LIVE" if is_live_mode() else "DEMO"
+        st.markdown(f"**Mode:** {_mode} | **AWS Key:** {'set' if aws_access_key else 'not set'}")
+        st.markdown(f"**Accounts loaded:** {len(accounts)} | **Servers loaded:** {len(servers)}")
+        if servers:
+            for s in servers:
+                ssm_icon = "🟢" if s.ssm_status == "Online" else "⚪"
+                state_icon = "🟢" if s.status == "Online" else "🔴"
+                st.markdown(f"- {state_icon} **{s.hostname}** (`{s.instance_id}`) | {s.region} | {s.os_version} | SSM: {ssm_icon} {s.ssm_status}")
 
     total_critical = sum(s.critical_vulns for s in servers)
     total_high = sum(s.high_vulns for s in servers)
