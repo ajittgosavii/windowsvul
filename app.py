@@ -931,10 +931,11 @@ st.markdown(f"""
 
 
 # ==================== TABS ====================
-(tab_dashboard, tab_fleet, tab_brain, tab_agent, tab_pipeline,
+(tab_dashboard, tab_fleet, tab_patches, tab_brain, tab_agent, tab_pipeline,
  tab_approvals, tab_itsm, tab_compliance, tab_scripts, tab_compare) = st.tabs([
     "📊 Dashboard",
     "🌐 Fleet View",
+    "🩹 Patch Status",
     "🧠 Agent Brain",
     "🤖 AI Chat",
     "⚡ Pipeline",
@@ -1427,6 +1428,178 @@ with tab_fleet:
             env_counts[env] = env_counts.get(env, 0) + 1
         if env_counts:
             st.bar_chart(pd.DataFrame(list(env_counts.items()), columns=["Environment", "Count"]).set_index("Environment"))
+
+
+# ==================== TAB: PATCH STATUS ====================
+with tab_patches:
+    st.markdown("#### 🩹 Patch Status — Installed vs Missing per Server")
+    st.caption("Real-time patch compliance data from AWS SSM Patch Manager" if is_live_mode() else "Simulated patch data (switch to LIVE for real SSM data)")
+
+    _patch_servers = get_servers()
+
+    # Summary metrics
+    _online_servers = [s for s in _patch_servers if s.ssm_status == "Online"]
+    _stopped_servers = [s for s in _patch_servers if s.status == "Stopped"]
+
+    ps1, ps2, ps3 = st.columns(3)
+    ps1.metric("SSM-Connected Servers", len(_online_servers))
+    ps2.metric("Stopped (No Patch Data)", len(_stopped_servers))
+    ps3.metric("Total Fleet", len(_patch_servers))
+
+    st.divider()
+
+    # Connect to SSM Patch Manager
+    _pm_session = None
+    if is_live_mode() and aws_access_key and aws_secret_key:
+        import boto3 as _boto3_pm
+        _pm_session = _boto3_pm.Session(
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name="us-west-1",
+        )
+
+    if st.button("🔍 Scan Patch Compliance Now", type="primary", use_container_width=True, key="patch_scan_now"):
+        if _pm_session and _online_servers:
+            _ssm_pm = _pm_session.client("ssm", region_name="us-west-1")
+            online_ids = [s.instance_id for s in _online_servers]
+            try:
+                import time as _time
+                resp = _ssm_pm.send_command(
+                    InstanceIds=online_ids,
+                    DocumentName="AWS-RunPatchBaseline",
+                    Parameters={"Operation": ["Scan"]},
+                    TimeoutSeconds=600,
+                    Comment="VulnShield AI patch scan",
+                )
+                cmd_id = resp["Command"]["CommandId"]
+                with st.spinner(f"Scanning {len(online_ids)} servers... (command: {cmd_id})"):
+                    _time.sleep(45)
+                st.success(f"Scan complete on {len(online_ids)} servers. Results below.")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Scan failed: {e}")
+        else:
+            st.info("Switch to LIVE mode with SSM-connected servers to run a real scan.")
+
+    st.divider()
+
+    # Per-server patch details
+    for srv in _patch_servers:
+        status_icon = "🟢" if srv.ssm_status == "Online" else "🔴"
+        compliance_badge = ""
+
+        with st.expander(f"{status_icon} **{srv.hostname}** ({srv.instance_id}) — {srv.region} — {srv.os_version}", expanded=(srv.ssm_status == "Online")):
+
+            if srv.ssm_status != "Online":
+                st.warning(f"Server is **{srv.status}** — SSM agent offline. No patch data available. Start the server to get compliance data.")
+                continue
+
+            # Get real patch data if in LIVE mode
+            if _pm_session and is_live_mode():
+                try:
+                    _ssm_patches = _pm_session.client("ssm", region_name=srv.region)
+
+                    # Compliance summary
+                    comp_resp = _ssm_patches.describe_instance_patch_states(InstanceIds=[srv.instance_id])
+                    patch_states = comp_resp.get("InstancePatchStates", [])
+
+                    if patch_states:
+                        ps = patch_states[0]
+                        installed = ps.get("InstalledCount", 0)
+                        missing = ps.get("MissingCount", 0)
+                        failed = ps.get("FailedCount", 0)
+                        other = ps.get("InstalledOtherCount", 0)
+                        is_compliant = (missing == 0 and failed == 0)
+
+                        mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                        mc1.metric("Installed", installed)
+                        mc2.metric("Installed (Other)", other)
+                        mc3.metric("Missing", missing, delta=f"-{missing} to fix" if missing > 0 else None, delta_color="inverse" if missing > 0 else "normal")
+                        mc4.metric("Failed", failed, delta=f"{failed} errors" if failed > 0 else None, delta_color="inverse" if failed > 0 else "normal")
+                        mc5.metric("Status", "COMPLIANT" if is_compliant else "NON-COMPLIANT")
+
+                    # Installed patches table
+                    st.markdown("##### Installed Patches")
+                    inst_resp = _ssm_patches.describe_instance_patches(
+                        InstanceId=srv.instance_id,
+                        Filters=[{"Key": "State", "Values": ["Installed", "InstalledOther"]}],
+                    )
+                    inst_patches = inst_resp.get("Patches", [])
+                    if inst_patches:
+                        inst_rows = []
+                        for p in inst_patches:
+                            kb = p.get("KBId", "")
+                            title = p.get("Title", "")
+                            if not title and not kb:
+                                continue
+                            inst_rows.append({
+                                "Status": "✅",
+                                "KB": kb,
+                                "Title": title[:80] if title else "—",
+                                "Classification": p.get("Classification", "—"),
+                                "Severity": p.get("Severity", "—"),
+                                "State": p.get("State", ""),
+                            })
+                        if inst_rows:
+                            st.dataframe(pd.DataFrame(inst_rows), use_container_width=True, hide_index=True)
+                    else:
+                        st.info("No installed patch data from SSM yet. Run a scan first.")
+
+                    # Missing patches table
+                    st.markdown("##### Missing Patches")
+                    miss_resp = _ssm_patches.describe_instance_patches(
+                        InstanceId=srv.instance_id,
+                        Filters=[{"Key": "State", "Values": ["Missing", "Failed"]}],
+                    )
+                    miss_patches = miss_resp.get("Patches", [])
+                    if miss_patches:
+                        miss_rows = []
+                        for p in miss_patches:
+                            sev = p.get("Severity", "—")
+                            sev_icon = {"Critical": "🔴", "Important": "🟠", "Moderate": "🟡"}.get(sev, "⚪")
+                            miss_rows.append({
+                                "Status": f"{sev_icon} MISSING",
+                                "KB": p.get("KBId", ""),
+                                "Title": p.get("Title", "")[:80],
+                                "Classification": p.get("Classification", "—"),
+                                "Severity": sev,
+                            })
+                        st.dataframe(pd.DataFrame(miss_rows), use_container_width=True, hide_index=True)
+
+                        # Install button per server
+                        if st.button(f"🩹 Install Missing Patches on {srv.hostname}", key=f"install_{srv.instance_id}", type="primary"):
+                            try:
+                                install_resp = _ssm_patches.send_command(
+                                    InstanceIds=[srv.instance_id],
+                                    DocumentName="AWS-RunPatchBaseline",
+                                    Parameters={"Operation": ["Install"], "RebootOption": ["RebootIfNeeded"]},
+                                    TimeoutSeconds=1800,
+                                    Comment=f"VulnShield AI patch install on {srv.hostname}",
+                                )
+                                st.success(f"Patch install initiated: {install_resp['Command']['CommandId']}")
+                                st.info("Server may reboot. Check back in 10-15 minutes.")
+                            except Exception as e:
+                                st.error(f"Install failed: {e}")
+                    else:
+                        st.success("✅ **Fully patched!** No missing patches.")
+
+                except Exception as e:
+                    st.error(f"Could not retrieve patch data: {e}")
+
+            else:
+                # DEMO mode — show simulated data
+                pm_demo = SSMPatchManager()
+                mc1, mc2, mc3, mc4, mc5 = st.columns(5)
+                mc1.metric("Installed", 2)
+                mc2.metric("Installed (Other)", 5)
+                mc3.metric("Missing", 1, delta="-1 to fix", delta_color="inverse")
+                mc4.metric("Failed", 0)
+                mc5.metric("Status", "NON-COMPLIANT")
+
+                st.markdown("##### Missing Patches")
+                missing = pm_demo._simulate_missing_patches(srv.instance_id)
+                miss_rows = [{"Status": "🔴 MISSING", "KB": p["kb"], "Title": p["title"][:80], "Severity": p["severity"]} for p in missing]
+                st.dataframe(pd.DataFrame(miss_rows), use_container_width=True, hide_index=True)
 
 
 # ==================== TAB: AGENT BRAIN (Control Plane) ====================
