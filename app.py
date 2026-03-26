@@ -97,6 +97,25 @@ def render_login_page():
             background: transparent !important;
         }
 
+        /* Kill ALL Streamlit container backgrounds on login page */
+        [data-testid="stForm"],
+        [data-testid="stForm"] > div,
+        [data-testid="stVerticalBlock"],
+        [data-testid="stVerticalBlockBorderWrapper"],
+        [data-testid="stHorizontalBlock"],
+        [data-testid="column"],
+        [data-testid="stElementContainer"],
+        .stForm,
+        .element-container,
+        .stVerticalBlock,
+        div[data-testid="stVerticalBlockBorderWrapper"] > div,
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
         /* Animated background particles effect */
         [data-testid="stAppViewContainer"]::before {
             content: '';
