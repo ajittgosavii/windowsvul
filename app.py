@@ -1543,7 +1543,16 @@ with tab_brain:
     st.divider()
     st.markdown("#### 🩹 SSM Patch Manager")
 
-    pm = SSMPatchManager()
+    # Connect Patch Manager to real AWS session
+    _pm_session = None
+    if is_live_mode() and aws_access_key and aws_secret_key:
+        import boto3 as _boto3
+        _pm_session = _boto3.Session(
+            aws_access_key_id=aws_access_key,
+            aws_secret_access_key=aws_secret_key,
+            region_name="us-west-1",
+        )
+    pm = SSMPatchManager(session=_pm_session, region="us-west-1")
     baselines = pm.get_patch_baselines()
     if baselines:
         bl_rows = [{"Name": b["name"], "ID": b["baseline_id"], "OS": b.get("os", "WINDOWS"), "Default": b.get("default", False)} for b in baselines]
