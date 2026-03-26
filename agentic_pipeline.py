@@ -145,9 +145,10 @@ class PipelineConfig:
 class AnalysisAgent:
     """AI agent that analyzes vulnerabilities and calculates risk scores."""
 
-    def __init__(self, remediator, claude_client=None):
+    def __init__(self, remediator, claude_client=None, openai_client=None):
         self.remediator = remediator
         self.claude_client = claude_client
+        self.openai_client = openai_client
 
     def analyze_vulnerability(
         self, vulnerability: Dict, server_context: Dict
@@ -179,11 +180,13 @@ class AnalysisAgent:
         # Risk score calculation
         risk_score = self._calculate_risk_score(vulnerability, server_context)
 
-        # AI-enhanced analysis if Claude is available
+        # AI-enhanced analysis: Claude → OpenAI → rule-based
         ai_reasoning = ""
         if self.claude_client:
-            ai_reasoning = self._ai_analyze(vulnerability, server_context, nist_controls)
-        else:
+            ai_reasoning = self._ai_analyze_claude(vulnerability, server_context, nist_controls)
+        if not ai_reasoning and self.openai_client:
+            ai_reasoning = self._ai_analyze_openai(vulnerability, server_context, nist_controls)
+        if not ai_reasoning:
             ai_reasoning = self._rule_based_reasoning(
                 vulnerability, server_context, nist_controls, confidence, risk_score
             )
@@ -243,12 +246,10 @@ class AnalysisAgent:
 
         return round(min(risk, 1.0), 3)
 
-    def _ai_analyze(
+    def _build_analysis_prompt(
         self, vulnerability: Dict, server_context: Dict, nist_controls: List[str]
     ) -> str:
-        """Claude AI-powered analysis."""
-        try:
-            prompt = f"""Analyze this Windows Server vulnerability:
+        return f"""Analyze this Windows Server vulnerability concisely:
 
 CVE: {vulnerability.get('cve_id', 'Unknown')}
 Title: {vulnerability.get('title', 'Unknown')}
@@ -262,22 +263,42 @@ Server Context:
 - Environment: {server_context.get('environment', 'Production')}
 - Application: {server_context.get('application', 'Unknown')}
 
-NIST Controls Mapped: {', '.join(nist_controls)}
+NIST Controls: {', '.join(nist_controls)}
 
-Provide:
-1. Risk assessment (1-2 sentences)
-2. Remediation recommendation
-3. Whether auto-remediation is safe
-4. Any caveats or prerequisites"""
+Provide in 3-4 sentences: risk assessment, remediation recommendation, and whether auto-remediation is safe."""
 
+    def _ai_analyze_claude(
+        self, vulnerability: Dict, server_context: Dict, nist_controls: List[str]
+    ) -> str:
+        """Try Claude AI analysis."""
+        try:
+            prompt = self._build_analysis_prompt(vulnerability, server_context, nist_controls)
             response = self.claude_client.messages.create(
                 model="claude-sonnet-4-20250514",
-                max_tokens=500,
+                max_tokens=300,
                 messages=[{"role": "user", "content": prompt}],
             )
             return response.content[0].text
-        except Exception as e:
-            return f"AI analysis unavailable: {e}"
+        except Exception:
+            return ""  # Fall through to OpenAI
+
+    def _ai_analyze_openai(
+        self, vulnerability: Dict, server_context: Dict, nist_controls: List[str]
+    ) -> str:
+        """Try OpenAI GPT-4o analysis."""
+        try:
+            prompt = self._build_analysis_prompt(vulnerability, server_context, nist_controls)
+            response = self.openai_client.chat.completions.create(
+                model="gpt-4o",
+                max_tokens=300,
+                messages=[
+                    {"role": "system", "content": "You are an expert Windows Server security analyst. Be concise."},
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            return response.choices[0].message.content
+        except Exception:
+            return ""  # Fall through to rule-based
 
     def _rule_based_reasoning(
         self,
@@ -510,6 +531,7 @@ class AgenticPipeline:
         aws_connector=None,
         itsm_client=None,
         claude_client=None,
+        openai_client=None,
         config: PipelineConfig = None,
     ):
         self.config = config or PipelineConfig()
@@ -517,8 +539,8 @@ class AgenticPipeline:
         self.aws_connector = aws_connector
         self.itsm_client = itsm_client
 
-        # Initialize agents
-        self.analysis_agent = AnalysisAgent(remediator, claude_client)
+        # Initialize agents with both AI clients for fallback
+        self.analysis_agent = AnalysisAgent(remediator, claude_client, openai_client)
         self.decision_agent = DecisionAgent(self.config)
         self.remediation_agent = RemediationAgent(remediator, aws_connector)
         self.verification_agent = VerificationAgent()

@@ -888,10 +888,17 @@ def get_pipeline() -> AgenticPipeline:
             require_restore_point=require_restore,
         )
         claude_client = None
+        openai_client = None
         if api_key:
             try:
                 import anthropic
                 claude_client = anthropic.Anthropic(api_key=api_key)
+            except ImportError:
+                pass
+        if openai_key:
+            try:
+                from openai import OpenAI
+                openai_client = OpenAI(api_key=openai_key)
             except ImportError:
                 pass
 
@@ -900,6 +907,7 @@ def get_pipeline() -> AgenticPipeline:
             aws_connector=st.session_state.get("aws_connector"),
             itsm_client=st.session_state.get("snow_client"),
             claude_client=claude_client,
+            openai_client=openai_client,
             config=config,
         )
     return st.session_state["pipeline"]
