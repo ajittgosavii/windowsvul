@@ -1,0 +1,230 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a23"/>
+      <stop offset="50%" style="stop-color:#1a1a3e"/>
+      <stop offset="100%" style="stop-color:#0f3460"/>
+    </linearGradient>
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#28a745"/>
+      <stop offset="100%" style="stop-color:#1a7a32"/>
+    </linearGradient>
+    <linearGradient id="orangeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#fd7e14"/>
+      <stop offset="100%" style="stop-color:#c95d0a"/>
+    </linearGradient>
+    <linearGradient id="redGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#dc3545"/>
+      <stop offset="100%" style="stop-color:#a82835"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="2" dy="3" stdDeviation="4" flood-opacity="0.3"/>
+    </filter>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="900" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="600" y="45" text-anchor="middle" fill="white" font-size="26" font-weight="bold">VulnShield AI &#8212; Autonomous Agent Architecture</text>
+  <text x="600" y="70" text-anchor="middle" fill="#a8b2d1" font-size="13">Hub &amp; Spoke Multi-Account | Perceive-Reason-Act-Learn | 12 AI Agents</text>
+
+  <!-- ==================== AGENT BRAIN (Center) ==================== -->
+  <rect x="340" y="90" width="520" height="340" rx="20" fill="rgba(59,130,246,0.08)" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="600" y="118" text-anchor="middle" fill="#3b82f6" font-size="15" font-weight="bold">AUTONOMOUS AGENT BRAIN</text>
+
+  <!-- Perceive -->
+  <rect x="370" y="135" width="130" height="55" rx="10" fill="url(#blueGrad)" filter="url(#shadow)"/>
+  <text x="435" y="158" text-anchor="middle" fill="white" font-size="12" font-weight="bold">PERCEIVE</text>
+  <text x="435" y="178" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">NVD, CISA KEV, SSM</text>
+
+  <!-- Reason -->
+  <rect x="530" y="135" width="130" height="55" rx="10" fill="url(#blueGrad)" filter="url(#shadow)"/>
+  <text x="595" y="158" text-anchor="middle" fill="white" font-size="12" font-weight="bold">REASON</text>
+  <text x="595" y="178" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">GPT-4o / Claude LLM</text>
+
+  <!-- Act -->
+  <rect x="690" y="135" width="130" height="55" rx="10" fill="url(#blueGrad)" filter="url(#shadow)"/>
+  <text x="755" y="158" text-anchor="middle" fill="white" font-size="12" font-weight="bold">ACT</text>
+  <text x="755" y="178" text-anchor="middle" fill="rgba(255,255,255,0.7)" font-size="9">Patch, Notify, Ticket</text>
+
+  <!-- Arrows between PRAL -->
+  <path d="M500 162 L525 162" stroke="white" stroke-width="2" marker-end="url(#arrowWhite)"/>
+  <path d="M660 162 L685 162" stroke="white" stroke-width="2" marker-end="url(#arrowWhite)"/>
+  <defs><marker id="arrowWhite" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="white"/></marker></defs>
+
+  <!-- Learn + Memory -->
+  <rect x="370" y="210" width="200" height="50" rx="10" fill="rgba(139,92,246,0.15)" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="470" y="232" text-anchor="middle" fill="#8b5cf6" font-size="11" font-weight="bold">LEARN &amp; REMEMBER</text>
+  <text x="470" y="248" text-anchor="middle" fill="#a8b2d1" font-size="9">Outcomes, patterns, server-specific knowledge</text>
+
+  <!-- Policies -->
+  <rect x="600" y="210" width="230" height="50" rx="10" fill="rgba(139,92,246,0.15)" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="715" y="232" text-anchor="middle" fill="#8b5cf6" font-size="11" font-weight="bold">NATURAL LANGUAGE POLICIES</text>
+  <text x="715" y="248" text-anchor="middle" fill="#a8b2d1" font-size="9">Plain English rules interpreted by LLM</text>
+
+  <!-- Decision Routing -->
+  <text x="600" y="290" text-anchor="middle" fill="white" font-size="12" font-weight="bold">CONFIDENCE-BASED ROUTING</text>
+
+  <!-- Auto -->
+  <rect x="370" y="305" width="140" height="45" rx="8" fill="url(#greenGrad)" filter="url(#shadow)"/>
+  <text x="440" y="325" text-anchor="middle" fill="white" font-size="11" font-weight="bold">AUTO-REMEDIATE</text>
+  <text x="440" y="342" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="9">Confidence >= 90%</text>
+
+  <!-- Human -->
+  <rect x="530" y="305" width="140" height="45" rx="8" fill="url(#orangeGrad)" filter="url(#shadow)"/>
+  <text x="600" y="325" text-anchor="middle" fill="white" font-size="11" font-weight="bold">HUMAN APPROVE</text>
+  <text x="600" y="342" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="9">Confidence 70-89%</text>
+
+  <!-- CHG -->
+  <rect x="690" y="305" width="140" height="45" rx="8" fill="url(#redGrad)" filter="url(#shadow)"/>
+  <text x="760" y="325" text-anchor="middle" fill="white" font-size="11" font-weight="bold">RAISE CHG</text>
+  <text x="760" y="342" text-anchor="middle" fill="rgba(255,255,255,0.8)" font-size="9">Confidence &lt; 70%</text>
+
+  <!-- Routing lines -->
+  <line x1="500" y1="295" x2="440" y2="305" stroke="#28a745" stroke-width="1.5"/>
+  <line x1="600" y1="295" x2="600" y2="305" stroke="#fd7e14" stroke-width="1.5"/>
+  <line x1="700" y1="295" x2="760" y2="305" stroke="#dc3545" stroke-width="1.5"/>
+
+  <!-- ==================== THREAT INTEL (Top Left) ==================== -->
+  <rect x="30" y="90" width="280" height="160" rx="14" fill="rgba(220,53,69,0.08)" stroke="#dc3545" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="170" y="115" text-anchor="middle" fill="#dc3545" font-size="13" font-weight="bold">THREAT INTELLIGENCE</text>
+
+  <rect x="50" y="130" width="110" height="35" rx="6" fill="rgba(220,53,69,0.15)" stroke="#dc3545" stroke-width="1"/>
+  <text x="105" y="152" text-anchor="middle" fill="#dc3545" font-size="10">NVD API</text>
+
+  <rect x="175" y="130" width="110" height="35" rx="6" fill="rgba(220,53,69,0.15)" stroke="#dc3545" stroke-width="1"/>
+  <text x="230" y="152" text-anchor="middle" fill="#dc3545" font-size="10">CISA KEV</text>
+
+  <rect x="50" y="175" width="110" height="35" rx="6" fill="rgba(220,53,69,0.15)" stroke="#dc3545" stroke-width="1"/>
+  <text x="105" y="197" text-anchor="middle" fill="#dc3545" font-size="10">EPSS Scores</text>
+
+  <rect x="175" y="175" width="110" height="35" rx="6" fill="rgba(220,53,69,0.15)" stroke="#dc3545" stroke-width="1"/>
+  <text x="230" y="197" text-anchor="middle" fill="#dc3545" font-size="10">MITRE ATT&amp;CK</text>
+
+  <text x="170" y="237" text-anchor="middle" fill="#a8b2d1" font-size="9">Real-time monitoring every 15 min</text>
+
+  <!-- Arrow: Threat Intel -> Agent Brain -->
+  <path d="M310 170 L340 170" stroke="#dc3545" stroke-width="2" marker-end="url(#arrowRed)"/>
+  <defs><marker id="arrowRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#dc3545"/></marker></defs>
+
+  <!-- ==================== EXECUTION (Top Right) ==================== -->
+  <rect x="890" y="90" width="280" height="160" rx="14" fill="rgba(40,167,69,0.08)" stroke="#28a745" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="1030" y="115" text-anchor="middle" fill="#28a745" font-size="13" font-weight="bold">EXECUTION LAYER</text>
+
+  <rect x="910" y="130" width="240" height="35" rx="6" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <text x="1030" y="152" text-anchor="middle" fill="#28a745" font-size="10">AWS SSM Patch Manager (RunPatchBaseline)</text>
+
+  <rect x="910" y="175" width="115" height="35" rx="6" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <text x="967" y="197" text-anchor="middle" fill="#28a745" font-size="10">ServiceNow ITSM</text>
+
+  <rect x="1035" y="175" width="115" height="35" rx="6" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <text x="1092" y="197" text-anchor="middle" fill="#28a745" font-size="10">Slack / Teams</text>
+
+  <text x="1030" y="237" text-anchor="middle" fill="#a8b2d1" font-size="9">CHG tickets, patches, notifications</text>
+
+  <!-- Arrow: Agent Brain -> Execution -->
+  <path d="M860 170 L890 170" stroke="#28a745" stroke-width="2" marker-end="url(#arrowGreen)"/>
+  <defs><marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#28a745"/></marker></defs>
+
+  <!-- ==================== HUB ACCOUNT (Bottom Left) ==================== -->
+  <rect x="30" y="470" width="350" height="400" rx="16" fill="rgba(59,130,246,0.06)" stroke="#3b82f6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="205" y="498" text-anchor="middle" fill="#3b82f6" font-size="14" font-weight="bold">HUB: 448549863273 (Splunk COE)</text>
+  <text x="205" y="518" text-anchor="middle" fill="#a8b2d1" font-size="10">us-east-1, us-west-1, us-east-2</text>
+
+  <!-- Hub servers -->
+  <rect x="50" y="535" width="310" height="30" rx="5" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <circle cx="65" cy="550" r="5" fill="#28a745"/><text x="80" y="554" fill="#a8b2d1" font-size="10">FinOps (i-0e284388) - Win 2025 - SSM Online</text>
+
+  <rect x="50" y="575" width="310" height="30" rx="5" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <circle cx="65" cy="590" r="5" fill="#28a745"/><text x="80" y="594" fill="#a8b2d1" font-size="10">WAFR (i-03f775ac) - Win 2025 - SSM Online</text>
+
+  <rect x="50" y="615" width="310" height="30" rx="5" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <circle cx="65" cy="630" r="5" fill="#28a745"/><text x="80" y="634" fill="#a8b2d1" font-size="10">ML-Server (i-0d381382) - Running - SSM Offline</text>
+
+  <rect x="50" y="655" width="310" height="30" rx="5" fill="rgba(220,53,69,0.1)" stroke="#6c757d" stroke-width="1"/>
+  <circle cx="65" cy="670" r="5" fill="#dc3545"/><text x="80" y="674" fill="#6c757d" font-size="10">Genai-Bastion, Bedrock, WAFR, FinOps, AIOPS_Kt</text>
+
+  <rect x="50" y="695" width="310" height="30" rx="5" fill="rgba(220,53,69,0.1)" stroke="#6c757d" stroke-width="1"/>
+  <circle cx="65" cy="710" r="5" fill="#dc3545"/><text x="80" y="714" fill="#6c757d" font-size="10">Finops_Windows, DB_MIGRATION (us-east-2)</text>
+
+  <text x="205" y="750" text-anchor="middle" fill="white" font-size="11" font-weight="bold">10 Windows Servers | 3 Running | 2 SSM</text>
+
+  <!-- Patch Baseline -->
+  <rect x="50" y="765" width="310" height="40" rx="8" fill="rgba(139,92,246,0.12)" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="205" y="785" text-anchor="middle" fill="#8b5cf6" font-size="10">Patch Baseline: pb-0aa04b12d28ff3abc</text>
+  <text x="205" y="800" text-anchor="middle" fill="#a8b2d1" font-size="9">Missing: KB5078740 (March 2026 Critical Update)</text>
+
+  <!-- Arrow: Hub -> Agent -->
+  <path d="M205 470 L550 430" stroke="#3b82f6" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowBlue)"/>
+  <defs><marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3b82f6"/></marker></defs>
+
+  <!-- ==================== SPOKE ACCOUNT (Bottom Center) ==================== -->
+  <rect x="420" y="470" width="350" height="280" rx="16" fill="rgba(139,92,246,0.06)" stroke="#8b5cf6" stroke-width="2" filter="url(#shadow)"/>
+  <text x="595" y="498" text-anchor="middle" fill="#8b5cf6" font-size="14" font-weight="bold">SPOKE: 950766978386 (Cloud Migration)</text>
+  <text x="595" y="518" text-anchor="middle" fill="#a8b2d1" font-size="10">us-east-1 | via AssumeRole from Hub</text>
+
+  <rect x="440" y="535" width="310" height="30" rx="5" fill="rgba(40,167,69,0.15)" stroke="#28a745" stroke-width="1"/>
+  <circle cx="455" cy="550" r="5" fill="#28a745"/><text x="470" y="554" fill="#a8b2d1" font-size="10">FinOps (i-07d45c3c) - Running - SSM Pending</text>
+
+  <rect x="440" y="575" width="310" height="30" rx="5" fill="rgba(220,53,69,0.1)" stroke="#6c757d" stroke-width="1"/>
+  <circle cx="455" cy="590" r="5" fill="#dc3545"/><text x="470" y="594" fill="#6c757d" font-size="10">WAFR (i-0cceebe4) - Stopped</text>
+
+  <text x="595" y="635" text-anchor="middle" fill="white" font-size="11" font-weight="bold">2 Windows Servers | 1 Running</text>
+
+  <!-- Cross-account role -->
+  <rect x="440" y="660" width="310" height="45" rx="8" fill="rgba(59,130,246,0.12)" stroke="#3b82f6" stroke-width="1"/>
+  <text x="595" y="680" text-anchor="middle" fill="#3b82f6" font-size="10" font-weight="bold">WindowsVulnScannerRole</text>
+  <text x="595" y="695" text-anchor="middle" fill="#a8b2d1" font-size="9">Trust: 448549863273 | SSMFullAccess + EC2ReadOnly</text>
+
+  <!-- Arrow: Hub -> Spoke (AssumeRole) -->
+  <path d="M380 600 L420 570" stroke="#ffc107" stroke-width="2.5" marker-end="url(#arrowYellow)"/>
+  <defs><marker id="arrowYellow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#ffc107"/></marker></defs>
+  <text x="385" y="595" fill="#ffc107" font-size="9" font-weight="bold">STS AssumeRole</text>
+
+  <!-- ==================== MORE SPOKES (Bottom Right) ==================== -->
+  <rect x="810" y="470" width="360" height="280" rx="16" fill="rgba(108,117,125,0.06)" stroke="#6c757d" stroke-width="1.5" stroke-dasharray="6,4" filter="url(#shadow)"/>
+  <text x="990" y="498" text-anchor="middle" fill="#6c757d" font-size="14" font-weight="bold">SPOKE ACCOUNTS (200+)</text>
+  <text x="990" y="518" text-anchor="middle" fill="#a8b2d1" font-size="10">Same pattern: 1 IAM role per account</text>
+
+  <rect x="830" y="540" width="320" height="28" rx="5" fill="rgba(108,117,125,0.08)" stroke="#6c757d" stroke-width="1"/>
+  <text x="990" y="559" text-anchor="middle" fill="#6c757d" font-size="10">123456789012 - Finance Production (us-east-1)</text>
+
+  <rect x="830" y="575" width="320" height="28" rx="5" fill="rgba(108,117,125,0.08)" stroke="#6c757d" stroke-width="1"/>
+  <text x="990" y="594" text-anchor="middle" fill="#6c757d" font-size="10">234567890123 - HR Systems (us-east-1)</text>
+
+  <rect x="830" y="610" width="320" height="28" rx="5" fill="rgba(108,117,125,0.08)" stroke="#6c757d" stroke-width="1"/>
+  <text x="990" y="629" text-anchor="middle" fill="#6c757d" font-size="10">345678901234 - ERP Platform (eu-west-1)</text>
+
+  <rect x="830" y="645" width="320" height="28" rx="5" fill="rgba(108,117,125,0.08)" stroke="#6c757d" stroke-width="1"/>
+  <text x="990" y="664" text-anchor="middle" fill="#6c757d" font-size="10">456789012345 - DevTest Environment (us-west-2)</text>
+
+  <text x="990" y="700" text-anchor="middle" fill="#6c757d" font-size="11">. . .</text>
+
+  <text x="990" y="730" text-anchor="middle" fill="#a8b2d1" font-size="10">Deploy via CloudFormation StackSets</text>
+  <text x="990" y="745" text-anchor="middle" fill="#a8b2d1" font-size="10">200 accounts in under 1 hour</text>
+
+  <!-- Arrow: Hub -> More Spokes -->
+  <path d="M380 650 L810 570" stroke="#6c757d" stroke-width="1.5" stroke-dasharray="6,3" marker-end="url(#arrowGray)"/>
+  <defs><marker id="arrowGray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#6c757d"/></marker></defs>
+
+  <!-- ==================== STREAMLIT UI (Bottom bar) ==================== -->
+  <rect x="30" y="850" width="1140" height="40" rx="10" fill="rgba(59,130,246,0.1)" stroke="#3b82f6" stroke-width="1"/>
+  <text x="600" y="875" text-anchor="middle" fill="#3b82f6" font-size="12" font-weight="bold">OBSERVATION DECK: winvulmgmt.streamlit.app</text>
+  <text x="200" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">Dashboard</text>
+  <text x="340" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">Fleet View</text>
+  <text x="460" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">Agent Brain</text>
+  <text x="740" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">Pipeline</text>
+  <text x="860" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">Approvals</text>
+  <text x="980" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">ITSM</text>
+  <text x="1080" y="875" text-anchor="middle" fill="#a8b2d1" font-size="9">Compliance</text>
+
+</svg>
