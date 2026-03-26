@@ -917,11 +917,36 @@ def get_pipeline() -> AgenticPipeline:
 
 
 # ==================== HEADER ====================
+_is_live = st.session_state.get("data_mode_toggle", False)
 _mode_badge = (
     '<span style="background:#28a745;color:white;padding:2px 10px;border-radius:10px;font-size:0.7rem;margin-left:0.8rem;vertical-align:middle;">LIVE</span>'
-    if st.session_state.get("data_mode_toggle", False) else
+    if _is_live else
     '<span style="background:#6c757d;color:white;padding:2px 10px;border-radius:10px;font-size:0.7rem;margin-left:0.8rem;vertical-align:middle;">DEMO</span>'
 )
+
+# Visual badges for data sources
+def badge_live(label="LIVE DATA"):
+    return f'<span style="background:#28a745;color:white;padding:1px 8px;border-radius:8px;font-size:0.65rem;font-weight:600;letter-spacing:0.5px;">{label}</span>'
+
+def badge_sim(label="SIMULATED"):
+    return f'<span style="background:#6c757d;color:white;padding:1px 8px;border-radius:8px;font-size:0.65rem;font-weight:600;letter-spacing:0.5px;">{label}</span>'
+
+def badge_real_aws():
+    return badge_live("REAL AWS") if _is_live else badge_sim("DEMO DATA")
+
+def badge_real_ssm():
+    return badge_live("REAL SSM SCAN") if _is_live else badge_sim("SIMULATED SCAN")
+
+def badge_real_snow():
+    return badge_live("REAL SERVICENOW") if snow_pass else badge_sim("SIMULATED ITSM")
+
+def badge_ai():
+    p = getattr(agent, 'provider', None)
+    if p and 'openai' in str(p):
+        return badge_live("GPT-4o AI")
+    elif p and 'claude' in str(p):
+        return badge_live("CLAUDE AI")
+    return badge_sim("RULE-BASED")
 st.markdown(f"""
 <div class="main-header">
     <h1>🛡️ Agentic AI — Enterprise Windows Vulnerability Management {_mode_badge}</h1>
@@ -1238,6 +1263,7 @@ def get_servers():
 
 # ==================== TAB: DASHBOARD ====================
 with tab_dashboard:
+    st.markdown(f"Server Data: {badge_real_aws()} | Vulnerability Scan: {badge_real_ssm()} | AI Analysis: {badge_ai()} | ITSM: {badge_real_snow()}", unsafe_allow_html=True)
     accounts = get_accounts()
     servers = get_servers()
 
@@ -1347,7 +1373,7 @@ Discovery ─── Analysis ─── Decision Engine
 
 # ==================== TAB: FLEET VIEW ====================
 with tab_fleet:
-    st.markdown("#### 🌐 Enterprise Fleet — Windows Servers Across AWS Accounts")
+    st.markdown(f"#### 🌐 Enterprise Fleet — Windows Servers Across AWS Accounts {badge_real_aws()}", unsafe_allow_html=True)
 
     accounts = get_accounts()
     servers = get_servers()
@@ -1432,7 +1458,7 @@ with tab_fleet:
 
 # ==================== TAB: PATCH STATUS ====================
 with tab_patches:
-    st.markdown("#### 🩹 Patch Status — Installed vs Missing per Server")
+    st.markdown(f"#### 🩹 Patch Status — Installed vs Missing per Server {badge_real_ssm()}", unsafe_allow_html=True)
     st.caption("Real-time patch compliance data from AWS SSM Patch Manager" if is_live_mode() else "Simulated patch data (switch to LIVE for real SSM data)")
 
     _patch_servers = get_servers()
@@ -1604,7 +1630,7 @@ with tab_patches:
 
 # ==================== TAB: AGENT BRAIN (Control Plane) ====================
 with tab_brain:
-    st.markdown("#### 🧠 Autonomous Agent — Control Plane")
+    st.markdown(f"#### 🧠 Autonomous Agent — Control Plane {badge_ai()}", unsafe_allow_html=True)
     st.caption("This is NOT a dashboard. This is the observation deck for your autonomous AI security engineer.")
 
     # Initialize autonomous agent
@@ -1816,7 +1842,7 @@ with tab_brain:
 
 # ==================== TAB: AI CHAT ====================
 with tab_agent:
-    st.markdown("#### 🤖 Enterprise AI Security Agent")
+    st.markdown(f"#### 🤖 Enterprise AI Security Agent {badge_ai()}", unsafe_allow_html=True)
     _provider_labels = {
         "claude": "🟢 Claude AI",
         "openai": "🟢 OpenAI GPT-4o",
@@ -1913,7 +1939,7 @@ with tab_agent:
 
 # ==================== TAB: PIPELINE ====================
 with tab_pipeline:
-    st.markdown("#### ⚡ Agentic AI Pipeline — Confidence-Based Routing")
+    st.markdown(f"#### ⚡ Agentic AI Pipeline — Confidence-Based Routing {badge_ai()} {badge_sim('SAMPLE CVEs')}", unsafe_allow_html=True)
 
     pipeline = get_pipeline()
 
@@ -2020,7 +2046,7 @@ with tab_pipeline:
 
 # ==================== TAB: APPROVAL QUEUE ====================
 with tab_approvals:
-    st.markdown("#### ✋ Human-in-the-Loop Approval Queue")
+    st.markdown(f"#### ✋ Human-in-the-Loop Approval Queue {badge_ai()}", unsafe_allow_html=True)
     st.caption("Vulnerabilities routed here have confidence scores between "
                f"{human_threshold:.0%} and {auto_threshold:.0%}. Review and approve or reject.")
 
@@ -2091,7 +2117,7 @@ with tab_approvals:
 
 # ==================== TAB: ITSM / SERVICENOW ====================
 with tab_itsm:
-    st.markdown("#### 🎫 ServiceNow ITSM Integration")
+    st.markdown(f"#### 🎫 ServiceNow ITSM Integration {badge_real_snow()}", unsafe_allow_html=True)
     st.markdown(f"**Instance:** {snow_url}")
 
     snow = st.session_state.get("snow_client")
