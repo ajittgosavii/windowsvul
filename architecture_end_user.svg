@@ -1,0 +1,267 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f8fafc"/><stop offset="100%" style="stop-color:#e2e8f0"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6"/><stop offset="100%" style="stop-color:#2563eb"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/><stop offset="100%" style="stop-color:#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#10b981"/><stop offset="100%" style="stop-color:#059669"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f59e0b"/><stop offset="100%" style="stop-color:#d97706"/>
+    </linearGradient>
+    <linearGradient id="red" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ef4444"/><stop offset="100%" style="stop-color:#dc2626"/>
+    </linearGradient>
+    <linearGradient id="dark" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e293b"/><stop offset="100%" style="stop-color:#0f172a"/>
+    </linearGradient>
+    <filter id="sh"><feDropShadow dx="1" dy="2" stdDeviation="3" flood-opacity="0.12"/></filter>
+    <filter id="shDeep"><feDropShadow dx="2" dy="4" stdDeviation="6" flood-opacity="0.18"/></filter>
+    <marker id="arr" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#64748b"/></marker>
+    <marker id="arrBlue" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#3b82f6"/></marker>
+    <marker id="arrGreen" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#10b981"/></marker>
+    <marker id="arrOrange" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#f59e0b"/></marker>
+    <marker id="arrRed" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#ef4444"/></marker>
+    <marker id="arrPurple" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto"><path d="M0,0 L10,3.5 L0,7" fill="#8b5cf6"/></marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="800" fill="url(#bg)" rx="12"/>
+
+  <!-- Title Bar -->
+  <rect x="0" y="0" width="1200" height="60" fill="url(#dark)" rx="12"/>
+  <rect x="0" y="30" width="1200" height="30" fill="url(#dark)"/>
+  <text x="600" y="28" text-anchor="middle" fill="white" font-size="20" font-weight="bold">VulnShield AI &#8212; How It Works</text>
+  <text x="600" y="48" text-anchor="middle" fill="#94a3b8" font-size="11">End-to-End Flow: From Threat Detection to Automated Remediation</text>
+
+  <!-- ==================== ROW 1: INPUTS (left to right) ==================== -->
+
+  <!-- 1. Threat Feeds -->
+  <rect x="30" y="90" width="170" height="120" rx="12" fill="white" stroke="#e2e8f0" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="30" y="90" width="170" height="32" rx="12" fill="url(#red)"/>
+  <rect x="30" y="110" width="170" height="12" fill="url(#red)"/>
+  <text x="115" y="112" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Threat Feeds</text>
+  <text x="50" y="145" fill="#475569" font-size="10">&#x1F6A8; NIST NVD (new CVEs)</text>
+  <text x="50" y="163" fill="#475569" font-size="10">&#x1F3F4; CISA KEV (exploited)</text>
+  <text x="50" y="181" fill="#475569" font-size="10">&#x1F4CA; EPSS (exploit probability)</text>
+  <text x="50" y="199" fill="#475569" font-size="10">&#x1F6E1;&#xFE0F; MITRE ATT&amp;CK</text>
+
+  <!-- 2. AWS Accounts -->
+  <rect x="230" y="90" width="170" height="120" rx="12" fill="white" stroke="#e2e8f0" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="230" y="90" width="170" height="32" rx="12" fill="url(#blue)"/>
+  <rect x="230" y="110" width="170" height="12" fill="url(#blue)"/>
+  <text x="315" y="112" text-anchor="middle" fill="white" font-size="11" font-weight="bold">AWS Accounts</text>
+  <text x="250" y="145" fill="#475569" font-size="10">&#x1F3E2; Hub: 448549863273</text>
+  <text x="250" y="163" fill="#475569" font-size="10">&#x1F517; Spoke: 950766978386</text>
+  <text x="250" y="181" fill="#475569" font-size="10">&#x1F517; Spoke: + 200 accounts</text>
+  <text x="250" y="199" fill="#94a3b8" font-size="9">STS AssumeRole cross-account</text>
+
+  <!-- 3. Windows Servers -->
+  <rect x="430" y="90" width="170" height="120" rx="12" fill="white" stroke="#e2e8f0" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="430" y="90" width="170" height="32" rx="12" fill="url(#blue)"/>
+  <rect x="430" y="110" width="170" height="12" fill="url(#blue)"/>
+  <text x="515" y="112" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Windows Servers</text>
+  <text x="450" y="145" fill="#475569" font-size="10">&#x1F5A5;&#xFE0F; 12 servers (2 accounts)</text>
+  <text x="450" y="163" fill="#475569" font-size="10">&#x2705; 3 running, SSM online</text>
+  <text x="450" y="181" fill="#475569" font-size="10">&#x1F534; 9 stopped / offline</text>
+  <text x="450" y="199" fill="#94a3b8" font-size="9">Win Server 2025 Datacenter</text>
+
+  <!-- ==================== ROW 2: AGENT BRAIN (center) ==================== -->
+
+  <!-- Big brain box -->
+  <rect x="120" y="250" width="560" height="200" rx="16" fill="white" stroke="#8b5cf6" stroke-width="2" filter="url(#shDeep)"/>
+  <rect x="120" y="250" width="560" height="38" rx="16" fill="url(#purple)"/>
+  <rect x="120" y="275" width="560" height="13" fill="url(#purple)"/>
+  <text x="400" y="276" text-anchor="middle" fill="white" font-size="14" font-weight="bold">&#x1F9E0; Autonomous AI Agent (Runs 24/7)</text>
+
+  <!-- PRAL steps inside -->
+  <rect x="140" y="300" width="120" height="50" rx="8" fill="#f0f9ff" stroke="#3b82f6" stroke-width="1.5"/>
+  <text x="200" y="322" text-anchor="middle" fill="#1e40af" font-size="11" font-weight="bold">PERCEIVE</text>
+  <text x="200" y="340" text-anchor="middle" fill="#64748b" font-size="8">Detect changes</text>
+
+  <rect x="280" y="300" width="120" height="50" rx="8" fill="#faf5ff" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="340" y="322" text-anchor="middle" fill="#6d28d9" font-size="11" font-weight="bold">REASON</text>
+  <text x="340" y="340" text-anchor="middle" fill="#64748b" font-size="8">LLM decides action</text>
+
+  <rect x="420" y="300" width="120" height="50" rx="8" fill="#f0fdf4" stroke="#10b981" stroke-width="1.5"/>
+  <text x="480" y="322" text-anchor="middle" fill="#065f46" font-size="11" font-weight="bold">ACT</text>
+  <text x="480" y="340" text-anchor="middle" fill="#64748b" font-size="8">Patch / Notify / Ticket</text>
+
+  <rect x="560" y="300" width="100" height="50" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="610" y="322" text-anchor="middle" fill="#92400e" font-size="11" font-weight="bold">LEARN</text>
+  <text x="610" y="340" text-anchor="middle" fill="#64748b" font-size="8">Remember outcome</text>
+
+  <!-- Arrows between PRAL -->
+  <path d="M260 325 L275 325" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M400 325 L415 325" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M540 325 L555 325" stroke="#64748b" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- Loop arrow back -->
+  <path d="M610 350 L610 370 L200 370 L200 350" stroke="#f59e0b" stroke-width="1.5" fill="none" stroke-dasharray="4,3" marker-end="url(#arrOrange)"/>
+  <text x="405" y="383" text-anchor="middle" fill="#92400e" font-size="8">Feedback loop — learns from every outcome</text>
+
+  <!-- Policies + Memory -->
+  <rect x="140" y="395" width="250" height="38" rx="8" fill="#faf5ff" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="265" y="415" text-anchor="middle" fill="#6d28d9" font-size="10">&#x1F4DC; 7 Natural Language Policies</text>
+  <text x="265" y="428" text-anchor="middle" fill="#94a3b8" font-size="8">Plain English rules — no YAML</text>
+
+  <rect x="410" y="395" width="250" height="38" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1"/>
+  <text x="535" y="415" text-anchor="middle" fill="#92400e" font-size="10">&#x1F9E0; Agent Memory &amp; Learning</text>
+  <text x="535" y="428" text-anchor="middle" fill="#94a3b8" font-size="8">"Last ERP patch caused outage — be careful"</text>
+
+  <!-- Input arrows to brain -->
+  <path d="M115 180 L115 235 L150 250" stroke="#ef4444" stroke-width="1.5" fill="none" marker-end="url(#arrRed)"/>
+  <path d="M315 210 L315 235 L300 250" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrBlue)"/>
+  <path d="M515 210 L515 235 L450 250" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrBlue)"/>
+
+  <!-- ==================== ROW 2: DECISION OUTPUTS (right side) ==================== -->
+
+  <!-- Confidence routing box -->
+  <rect x="720" y="250" width="450" height="200" rx="16" fill="white" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shDeep)"/>
+  <rect x="720" y="250" width="450" height="38" rx="16" fill="url(#dark)"/>
+  <rect x="720" y="275" width="450" height="13" fill="url(#dark)"/>
+  <text x="945" y="276" text-anchor="middle" fill="white" font-size="13" font-weight="bold">AI Confidence-Based Routing</text>
+
+  <!-- Auto -->
+  <rect x="740" y="300" width="130" height="65" rx="10" fill="#f0fdf4" stroke="#10b981" stroke-width="2" filter="url(#sh)"/>
+  <text x="805" y="322" text-anchor="middle" fill="#065f46" font-size="11" font-weight="bold">&#x2705; Auto-Fix</text>
+  <text x="805" y="340" text-anchor="middle" fill="#10b981" font-size="18" font-weight="bold">>= 90%</text>
+  <text x="805" y="358" text-anchor="middle" fill="#64748b" font-size="8">SSM Patch Manager</text>
+
+  <!-- Human -->
+  <rect x="885" y="300" width="130" height="65" rx="10" fill="#fffbeb" stroke="#f59e0b" stroke-width="2" filter="url(#sh)"/>
+  <text x="950" y="322" text-anchor="middle" fill="#92400e" font-size="11" font-weight="bold">&#x270B; Human Review</text>
+  <text x="950" y="340" text-anchor="middle" fill="#f59e0b" font-size="18" font-weight="bold">70-89%</text>
+  <text x="950" y="358" text-anchor="middle" fill="#64748b" font-size="8">Approval Queue</text>
+
+  <!-- CHG Ticket -->
+  <rect x="1030" y="300" width="130" height="65" rx="10" fill="#fef2f2" stroke="#ef4444" stroke-width="2" filter="url(#sh)"/>
+  <text x="1095" y="322" text-anchor="middle" fill="#991b1b" font-size="11" font-weight="bold">&#x1F3AB; CHG Ticket</text>
+  <text x="1095" y="340" text-anchor="middle" fill="#ef4444" font-size="18" font-weight="bold">&lt; 70%</text>
+  <text x="1095" y="358" text-anchor="middle" fill="#64748b" font-size="8">ServiceNow</text>
+
+  <!-- Examples under each -->
+  <text x="805" y="388" text-anchor="middle" fill="#94a3b8" font-size="8">KB security update</text>
+  <text x="805" y="400" text-anchor="middle" fill="#94a3b8" font-size="8">well-tested, no reboot</text>
+
+  <text x="950" y="388" text-anchor="middle" fill="#94a3b8" font-size="8">RDP config change</text>
+  <text x="950" y="400" text-anchor="middle" fill="#94a3b8" font-size="8">on production server</text>
+
+  <text x="1095" y="388" text-anchor="middle" fill="#94a3b8" font-size="8">Kernel update needing</text>
+  <text x="1095" y="400" text-anchor="middle" fill="#94a3b8" font-size="8">maintenance window</text>
+
+  <!-- Percentage labels -->
+  <rect x="740" y="420" width="420" height="22" rx="11" fill="#f1f5f9"/>
+  <rect x="740" y="420" width="168" height="22" rx="11" fill="#10b981" opacity="0.2"/>
+  <rect x="908" y="420" width="126" height="22" rx="11" fill="#f59e0b" opacity="0.2"/>
+  <rect x="1034" y="420" width="126" height="22" rx="11" fill="#ef4444" opacity="0.2"/>
+  <text x="824" y="435" text-anchor="middle" fill="#065f46" font-size="9" font-weight="bold">~60% auto-fixed</text>
+  <text x="971" y="435" text-anchor="middle" fill="#92400e" font-size="9" font-weight="bold">~25% reviewed</text>
+  <text x="1097" y="435" text-anchor="middle" fill="#991b1b" font-size="9" font-weight="bold">~15% tickets</text>
+
+  <!-- Arrow: Brain -> Decisions -->
+  <path d="M680 350 L715 350" stroke="#8b5cf6" stroke-width="2" marker-end="url(#arrPurple)"/>
+
+  <!-- ==================== ROW 3: OUTPUTS ==================== -->
+
+  <!-- SSM Patch Manager -->
+  <rect x="30" y="500" width="220" height="130" rx="12" fill="white" stroke="#10b981" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="30" y="500" width="220" height="30" rx="12" fill="url(#green)"/>
+  <rect x="30" y="520" width="220" height="10" fill="url(#green)"/>
+  <text x="140" y="521" text-anchor="middle" fill="white" font-size="11" font-weight="bold">AWS SSM Patch Manager</text>
+  <text x="50" y="550" fill="#475569" font-size="9">&#x2705; Custom baselines per OS</text>
+  <text x="50" y="567" fill="#475569" font-size="9">&#x2705; RunPatchBaseline (Scan + Install)</text>
+  <text x="50" y="584" fill="#475569" font-size="9">&#x2705; Maintenance windows</text>
+  <text x="50" y="601" fill="#475569" font-size="9">&#x2705; Compliance reporting</text>
+  <text x="50" y="620" fill="#94a3b8" font-size="8">Production-grade, AWS-native</text>
+
+  <!-- ServiceNow -->
+  <rect x="280" y="500" width="220" height="130" rx="12" fill="white" stroke="#3b82f6" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="280" y="500" width="220" height="30" rx="12" fill="url(#blue)"/>
+  <rect x="280" y="520" width="220" height="10" fill="url(#blue)"/>
+  <text x="390" y="521" text-anchor="middle" fill="white" font-size="11" font-weight="bold">ServiceNow ITSM</text>
+  <text x="300" y="550" fill="#475569" font-size="9">&#x1F3AB; Auto-create CHG tickets</text>
+  <text x="300" y="567" fill="#475569" font-size="9">&#x1F6A8; Auto-create INC for failures</text>
+  <text x="300" y="584" fill="#475569" font-size="9">&#x1F4E6; CMDB sync (all servers)</text>
+  <text x="300" y="601" fill="#475569" font-size="9">&#x1F4DD; Full plans: implement, backout, test</text>
+  <text x="300" y="620" fill="#94a3b8" font-size="8">dev218436.service-now.com</text>
+
+  <!-- Notifications -->
+  <rect x="530" y="500" width="220" height="130" rx="12" fill="white" stroke="#f59e0b" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="530" y="500" width="220" height="30" rx="12" fill="url(#orange)"/>
+  <rect x="530" y="520" width="220" height="10" fill="url(#orange)"/>
+  <text x="640" y="521" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Notifications</text>
+  <text x="550" y="550" fill="#475569" font-size="9">&#x1F4AC; Slack channel alerts</text>
+  <text x="550" y="567" fill="#475569" font-size="9">&#x1F4E7; Microsoft Teams cards</text>
+  <text x="550" y="584" fill="#475569" font-size="9">&#x2709;&#xFE0F; Email (SMTP)</text>
+  <text x="550" y="601" fill="#475569" font-size="9">&#x1F514; Severity-based routing</text>
+  <text x="550" y="620" fill="#94a3b8" font-size="8">Critical = all channels</text>
+
+  <!-- Reports -->
+  <rect x="780" y="500" width="220" height="130" rx="12" fill="white" stroke="#8b5cf6" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="780" y="500" width="220" height="30" rx="12" fill="url(#purple)"/>
+  <rect x="780" y="520" width="220" height="10" fill="url(#purple)"/>
+  <text x="890" y="521" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Compliance &amp; Reports</text>
+  <text x="800" y="550" fill="#475569" font-size="9">&#x1F4CB; NIST SP 800-53 mapping</text>
+  <text x="800" y="567" fill="#475569" font-size="9">&#x1F4CB; CIS Benchmark compliance</text>
+  <text x="800" y="584" fill="#475569" font-size="9">&#x1F4C4; Executive PDF reports</text>
+  <text x="800" y="601" fill="#475569" font-size="9">&#x1F4C8; Trend analysis over time</text>
+  <text x="800" y="620" fill="#94a3b8" font-size="8">Board-ready, audit-compliant</text>
+
+  <!-- Rollback -->
+  <rect x="1030" y="500" width="140" height="130" rx="12" fill="white" stroke="#ef4444" stroke-width="1.5" filter="url(#sh)"/>
+  <rect x="1030" y="500" width="140" height="30" rx="12" fill="url(#red)"/>
+  <rect x="1030" y="520" width="140" height="10" fill="url(#red)"/>
+  <text x="1100" y="521" text-anchor="middle" fill="white" font-size="11" font-weight="bold">Rollback</text>
+  <text x="1050" y="550" fill="#475569" font-size="9">&#x21A9;&#xFE0F; Auto-revert on failure</text>
+  <text x="1050" y="567" fill="#475569" font-size="9">&#x1F4BE; Registry backup</text>
+  <text x="1050" y="584" fill="#475569" font-size="9">&#x1F4BF; System restore point</text>
+  <text x="1050" y="601" fill="#475569" font-size="9">&#x26A0;&#xFE0F; P1 incident auto</text>
+
+  <!-- Arrows: Brain -> Outputs -->
+  <path d="M300 450 L140 495" stroke="#10b981" stroke-width="1.5" fill="none" marker-end="url(#arrGreen)"/>
+  <path d="M400 450 L390 495" stroke="#3b82f6" stroke-width="1.5" fill="none" marker-end="url(#arrBlue)"/>
+  <path d="M500 450 L640 495" stroke="#f59e0b" stroke-width="1.5" fill="none" marker-end="url(#arrOrange)"/>
+  <path d="M805 450 L890 495" stroke="#8b5cf6" stroke-width="1.5" fill="none" marker-end="url(#arrPurple)"/>
+  <path d="M950 450 L1100 495" stroke="#ef4444" stroke-width="1.5" fill="none" marker-end="url(#arrRed)"/>
+
+  <!-- ==================== ROW 4: USER ROLES ==================== -->
+
+  <rect x="30" y="665" width="1140" height="105" rx="14" fill="white" stroke="#e2e8f0" stroke-width="1.5" filter="url(#sh)"/>
+  <text x="600" y="690" text-anchor="middle" fill="#1e293b" font-size="13" font-weight="bold">Who Uses What</text>
+
+  <!-- Security Engineer -->
+  <rect x="60" y="705" width="200" height="50" rx="8" fill="#f0f9ff" stroke="#3b82f6" stroke-width="1"/>
+  <text x="160" y="725" text-anchor="middle" fill="#1e40af" font-size="11" font-weight="bold">&#x1F6E1;&#xFE0F; Security Engineer</text>
+  <text x="160" y="743" text-anchor="middle" fill="#64748b" font-size="9">Agent Brain, Policies, Approvals</text>
+
+  <!-- DevOps -->
+  <rect x="290" y="705" width="200" height="50" rx="8" fill="#f0fdf4" stroke="#10b981" stroke-width="1"/>
+  <text x="390" y="725" text-anchor="middle" fill="#065f46" font-size="11" font-weight="bold">&#x2699;&#xFE0F; DevOps Engineer</text>
+  <text x="390" y="743" text-anchor="middle" fill="#64748b" font-size="9">Fleet View, Pipeline, Scripts</text>
+
+  <!-- ITSM / Change Manager -->
+  <rect x="520" y="705" width="200" height="50" rx="8" fill="#fffbeb" stroke="#f59e0b" stroke-width="1"/>
+  <text x="620" y="725" text-anchor="middle" fill="#92400e" font-size="11" font-weight="bold">&#x1F3AB; Change Manager</text>
+  <text x="620" y="743" text-anchor="middle" fill="#64748b" font-size="9">ITSM, CHG tickets, Approvals</text>
+
+  <!-- Auditor -->
+  <rect x="750" y="705" width="200" height="50" rx="8" fill="#faf5ff" stroke="#8b5cf6" stroke-width="1"/>
+  <text x="850" y="725" text-anchor="middle" fill="#6d28d9" font-size="11" font-weight="bold">&#x1F4CB; Compliance Auditor</text>
+  <text x="850" y="743" text-anchor="middle" fill="#64748b" font-size="9">NIST/CIS reports, Compliance tab</text>
+
+  <!-- CISO -->
+  <rect x="980" y="705" width="170" height="50" rx="8" fill="#fef2f2" stroke="#ef4444" stroke-width="1"/>
+  <text x="1065" y="725" text-anchor="middle" fill="#991b1b" font-size="11" font-weight="bold">&#x1F4CA; CISO / VP</text>
+  <text x="1065" y="743" text-anchor="middle" fill="#64748b" font-size="9">Dashboard, Executive Reports</text>
+
+  <!-- Footer -->
+  <text x="600" y="792" text-anchor="middle" fill="#94a3b8" font-size="10">VulnShield AI v3.0 | 12 AI Agents | $5-15K/year vs $200K+ enterprise tools | winvulmgmt.streamlit.app</text>
+
+</svg>
