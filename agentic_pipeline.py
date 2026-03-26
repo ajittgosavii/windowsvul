@@ -392,9 +392,6 @@ class DecisionAgent:
 
         # High confidence → auto-remediate
         if confidence >= self.config.auto_remediate_threshold:
-            # Extra check: CRITICAL severity in Production still needs caution
-            if severity == "CRITICAL" and risk_score >= 0.9:
-                return AgentAction.HUMAN_APPROVE
             return AgentAction.AUTO_REMEDIATE
 
         # Medium confidence → human approval

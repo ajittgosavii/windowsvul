@@ -456,47 +456,68 @@ class WindowsServerRemediator:
     
     def calculate_confidence_score(self, vulnerability: Dict, remediation_plan: Dict) -> float:
         """
-        Calculate confidence score for auto-remediation decision (NEW)
-        
+        Calculate confidence score for auto-remediation decision.
+
+        Designed to produce a realistic 3-way split:
+          ~40% score >= 0.90 (auto-remediate)
+          ~35% score 0.70-0.89 (human approval)
+          ~25% score < 0.70 (CHG ticket)
+
         Factors:
-        - Severity (higher = more tested)
-        - Package type (Microsoft = higher confidence)
-        - Registry changes (fewer = higher confidence)
-        - Reboot requirement (required = slightly lower)
-        
-        Returns:
-            Confidence score 0.0-1.0
+        - Package type (Microsoft core = very high, third-party = low)
+        - Attack vector (Network = riskier = lower confidence for auto)
+        - Registry changes (more = lower confidence)
+        - Reboot requirement (reboot = much lower confidence)
+        - Exploitability (high exploit = lower confidence for auto)
+        - Severity (MEDIUM with simple fix = high confidence)
         """
-        base_confidence = 0.7
-        
-        # Severity factor
-        severity = vulnerability.get('severity', 'MEDIUM')
-        if severity == 'CRITICAL':
-            base_confidence += 0.15
-        elif severity == 'HIGH':
-            base_confidence += 0.10
-        elif severity == 'MEDIUM':
-            base_confidence += 0.05
-        
-        # Package type factor
+        base_confidence = 0.82
+
         package = vulnerability.get('packageName', '').lower()
-        if 'windows' in package or 'microsoft' in package:
-            base_confidence += 0.10
-        
-        # Registry changes factor
+        attack_vector = vulnerability.get('attack_vector', 'Network')
+        exploitability = vulnerability.get('exploitability', 'Medium')
         registry_count = len(remediation_plan.get('registry_fixes', []))
-        if registry_count == 0:
-            base_confidence += 0.05
-        elif registry_count <= 3:
+        needs_reboot = remediation_plan.get('reboot_required', False)
+
+        # Package type — biggest differentiator
+        if '.net' in package or 'framework' in package:
+            base_confidence += 0.14  # .NET = safest auto-patch
+        elif 'iis' in package or 'information services' in package:
+            base_confidence += 0.10  # IIS = well-tested
+        elif 'defender' in package or 'antivirus' in package:
+            base_confidence += 0.12  # Defender updates always safe
+        elif 'windows' in package and 'kernel' not in package:
             base_confidence += 0.02
-        else:
-            base_confidence -= 0.05
-        
-        # Reboot factor
-        if remediation_plan.get('reboot_required'):
-            base_confidence -= 0.03
-        
-        return min(base_confidence, 0.98)
+        elif any(x in package for x in ['rdp', 'remote desktop', 'terminal']):
+            base_confidence -= 0.08
+        elif any(x in package for x in ['kernel', 'streaming']):
+            base_confidence -= 0.18  # Kernel = very risky
+        elif any(x in package for x in ['tcp', 'ip']):
+            base_confidence -= 0.12  # Network stack = risky
+        elif any(x in package for x in ['driver', 'wi-fi']):
+            base_confidence -= 0.22  # Drivers = most risky
+
+        # Attack vector
+        if attack_vector == 'Local':
+            base_confidence += 0.04
+        elif attack_vector == 'Adjacent':
+            base_confidence -= 0.12
+
+        # Exploitability
+        if exploitability == 'Low':
+            base_confidence += 0.04
+        elif exploitability == 'High':
+            base_confidence -= 0.02
+
+        # Registry changes
+        if registry_count > 4:
+            base_confidence -= 0.06
+
+        # Reboot — only penalize if package is risky
+        if needs_reboot and base_confidence < 0.85:
+            base_confidence -= 0.08
+
+        return round(min(max(base_confidence, 0.40), 0.98), 2)
     
     def should_auto_remediate(self, confidence_score: float, threshold: float = 0.85) -> bool:
         """Determine if auto-remediation should be allowed (NEW)"""
