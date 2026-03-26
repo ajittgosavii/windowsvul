@@ -722,12 +722,19 @@ with st.sidebar:
         else:
             st.markdown("🔵 **DEMO**")
 
-    # Clear cached data when toggle changes so it re-fetches
+    # Clear cached data when toggle changes
     if _prev_mode is not None and _prev_mode != data_mode:
         st.session_state["accounts"] = []
         st.session_state["servers"] = []
         st.session_state["aws_connector"] = None
     st.session_state["_prev_data_mode"] = data_mode
+
+    # Refresh button to force re-discovery
+    if st.button("🔄 Refresh Data", use_container_width=True, key="refresh_data"):
+        st.session_state["accounts"] = []
+        st.session_state["servers"] = []
+        st.session_state["aws_connector"] = None
+        st.rerun()
 
     # User info & logout (compact)
     user = st.session_state.get("user_info", {})
