@@ -735,30 +735,34 @@ with st.sidebar:
     # ==================== HUB & SPOKE MULTI-ACCOUNT ====================
     st.markdown("## 🌐 Multi-Account (Hub & Spoke)")
 
-    # Hub account (management)
-    st.markdown(f"**Hub Account:** `{mgmt_account}`")
-    st.caption("Central management — scans all spoke accounts via AssumeRole")
+    # Hub account
+    st.caption(f"Hub: `{mgmt_account}` — scans spokes via AssumeRole")
 
-    # Spoke account selector
-    st.markdown("#### Spoke Accounts")
+    # Build account options for multiselect
+    _acct_options = {
+        f"{info['name']} ({acct_id})": acct_id
+        for acct_id, info in ACCOUNT_REGISTRY.items()
+    }
 
-    if "selected_accounts" not in st.session_state:
-        st.session_state["selected_accounts"] = list(ACCOUNT_REGISTRY.keys())
+    # Filter by OU
+    _all_ous = sorted(set(info["ou"] for info in ACCOUNT_REGISTRY.values()))
+    ou_filter = st.selectbox("Filter by OU", ["All OUs"] + _all_ous, key="ou_filter")
 
-    select_all = st.checkbox("Select All Accounts", value=True, key="select_all_accts")
+    if ou_filter != "All OUs":
+        _acct_options = {
+            label: acct_id for label, acct_id in _acct_options.items()
+            if ACCOUNT_REGISTRY[acct_id]["ou"] == ou_filter
+        }
 
-    selected_accounts = []
-    for acct_id, info in ACCOUNT_REGISTRY.items():
-        role_icon = "🔵" if info["role"] == "Hub" else "🟢"
-        is_selected = st.checkbox(
-            f"{role_icon} {info['name']} ({acct_id})",
-            value=select_all or acct_id in st.session_state["selected_accounts"],
-            key=f"acct_{acct_id}",
-            help=f"OU: {info['ou']} | Regions: {', '.join(info['regions'])}",
-        )
-        if is_selected:
-            selected_accounts.append(acct_id)
+    # Multiselect dropdown (scales to 200+ accounts)
+    selected_labels = st.multiselect(
+        "Select Spoke Accounts",
+        options=list(_acct_options.keys()),
+        default=list(_acct_options.keys()),
+        key="acct_multiselect",
+    )
 
+    selected_accounts = [_acct_options[label] for label in selected_labels]
     st.session_state["selected_accounts"] = selected_accounts
     st.caption(f"{len(selected_accounts)} of {len(ACCOUNT_REGISTRY)} accounts selected")
 
