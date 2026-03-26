@@ -906,6 +906,8 @@ def _discover_live_servers(connector) -> tuple:
     """Directly query EC2 + SSM for real Windows servers (no Organizations needed)."""
     import boto3
 
+    _errors = []
+
     session_kwargs = {"region_name": "us-west-1"}
     if aws_access_key and aws_secret_key:
         session_kwargs["aws_access_key_id"] = aws_access_key
@@ -938,8 +940,8 @@ def _discover_live_servers(connector) -> tuple:
                 )
                 for si in ssm_resp.get("InstanceInformationList", []):
                     ssm_info[si["InstanceId"]] = si
-            except Exception:
-                pass
+            except Exception as ssm_err:
+                _errors.append(f"SSM {region}: {ssm_err}")
 
             for reservation in resp.get("Reservations", []):
                 for inst in reservation.get("Instances", []):
@@ -948,7 +950,6 @@ def _discover_live_servers(connector) -> tuple:
                     state = inst["State"]["Name"]
                     ssm_data = ssm_info.get(iid)
 
-                    # Use real OS name from SSM if available
                     os_name = ssm_data["PlatformName"] if ssm_data else "Windows Server"
                     os_build = ssm_data.get("PlatformVersion", "") if ssm_data else ""
                     is_ssm_online = ssm_data is not None and ssm_data.get("PingStatus") == "Online"
@@ -970,11 +971,13 @@ def _discover_live_servers(connector) -> tuple:
                         medium_vulns=8 if is_ssm_online else 0,
                         tags={**tags, "InstanceType": inst.get("InstanceType", "")},
                     ))
-        except Exception:
-            pass
+        except Exception as e:
+            _errors.append(f"EC2 {region}: {e}")
+
+    # Store errors for debug display
+    st.session_state["_live_errors"] = _errors
 
     # Build account summary from real data
-    running = sum(1 for s in all_servers if s.status == "Online")
     account = AWSAccount(
         account_id=mgmt_account,
         account_name="Splunk COE / Primary",
@@ -1036,8 +1039,16 @@ with tab_dashboard:
     # Debug info (collapsible) to verify data source
     with st.expander("🔧 Data Source Debug", expanded=False):
         _mode = "LIVE" if is_live_mode() else "DEMO"
-        st.markdown(f"**Mode:** {_mode} | **AWS Key:** {'set' if aws_access_key else 'not set'}")
+        st.markdown(f"**Mode:** {_mode} | **AWS Key:** `{aws_access_key[:8]}...` " if aws_access_key else f"**Mode:** {_mode} | **AWS Key:** not set")
         st.markdown(f"**Accounts loaded:** {len(accounts)} | **Servers loaded:** {len(servers)}")
+
+        # Show any errors from live discovery
+        _live_errors = st.session_state.get("_live_errors", [])
+        if _live_errors:
+            st.error("**Discovery Errors:**")
+            for err in _live_errors:
+                st.markdown(f"- `{err}`")
+
         if servers:
             for s in servers:
                 ssm_icon = "🟢" if s.ssm_status == "Online" else "⚪"
