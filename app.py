@@ -914,7 +914,7 @@ def _discover_live_servers(connector) -> tuple:
             ec2 = session.client("ec2", region_name=region)
             ssm = session.client("ssm", region_name=region)
 
-            # Get all Windows instances (running + stopped)
+            # Get Windows instances
             resp = ec2.describe_instances(
                 Filters=[
                     {"Name": "platform", "Values": ["windows"]},
@@ -922,14 +922,14 @@ def _discover_live_servers(connector) -> tuple:
                 ],
             )
 
-            # Get SSM online instances for this region
-            ssm_online = set()
+            # Get SSM info keyed by instance ID
+            ssm_info = {}
             try:
                 ssm_resp = ssm.describe_instance_information(
                     Filters=[{"Key": "PlatformTypes", "Values": ["Windows"]}],
                 )
-                for inst in ssm_resp.get("InstanceInformationList", []):
-                    ssm_online.add(inst["InstanceId"])
+                for si in ssm_resp.get("InstanceInformationList", []):
+                    ssm_info[si["InstanceId"]] = si
             except Exception:
                 pass
 
@@ -938,6 +938,12 @@ def _discover_live_servers(connector) -> tuple:
                     iid = inst["InstanceId"]
                     tags = {t["Key"]: t["Value"] for t in inst.get("Tags", [])}
                     state = inst["State"]["Name"]
+                    ssm_data = ssm_info.get(iid)
+
+                    # Use real OS name from SSM if available
+                    os_name = ssm_data["PlatformName"] if ssm_data else "Windows Server"
+                    os_build = ssm_data.get("PlatformVersion", "") if ssm_data else ""
+                    is_ssm_online = ssm_data is not None and ssm_data.get("PingStatus") == "Online"
 
                     all_servers.append(WindowsServer(
                         instance_id=iid,
@@ -945,27 +951,27 @@ def _discover_live_servers(connector) -> tuple:
                         account_name="Splunk COE / Primary",
                         hostname=tags.get("Name", iid),
                         private_ip=inst.get("PrivateIpAddress", "N/A"),
-                        os_version="Windows Server",
-                        os_build=inst.get("PlatformDetails", "Windows"),
+                        os_version=os_name,
+                        os_build=os_build,
                         region=region,
                         status="Online" if state == "running" else "Stopped",
-                        ssm_status="Online" if iid in ssm_online else "Offline",
-                        patch_compliance=0.85 if iid in ssm_online else 0.0,
-                        critical_vulns=3 if iid in ssm_online else 0,
-                        high_vulns=5 if iid in ssm_online else 0,
-                        medium_vulns=8 if iid in ssm_online else 0,
-                        tags=tags,
+                        ssm_status="Online" if is_ssm_online else "Offline",
+                        patch_compliance=0.85 if is_ssm_online else 0.0,
+                        critical_vulns=3 if is_ssm_online else 0,
+                        high_vulns=5 if is_ssm_online else 0,
+                        medium_vulns=8 if is_ssm_online else 0,
+                        tags={**tags, "InstanceType": inst.get("InstanceType", "")},
                     ))
-        except Exception as e:
-            pass  # Skip regions that fail
+        except Exception:
+            pass
 
-    # Build single account entry
+    # Build account summary from real data
     running = sum(1 for s in all_servers if s.status == "Online")
     account = AWSAccount(
         account_id=mgmt_account,
         account_name="Splunk COE / Primary",
         ou_path="Production",
-        region="us-west-1",
+        region="us-east-1, us-west-1, us-east-2",
         server_count=len(all_servers),
         critical_vulns=sum(s.critical_vulns for s in all_servers),
         high_vulns=sum(s.high_vulns for s in all_servers),
