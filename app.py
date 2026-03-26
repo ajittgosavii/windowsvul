@@ -1048,29 +1048,40 @@ def _run_live_vuln_check(ssm_client, instance_id: str, errors: list) -> tuple:
     return 0, 0, 0, 0.0
 
 
-def _discover_live_servers(connector) -> tuple:
-    """Directly query EC2 + SSM for real Windows servers (no Organizations needed)."""
+# Spoke accounts with cross-account roles
+SPOKE_ACCOUNTS = {
+    "950766978386": {
+        "name": "Cloud Migration Primary",
+        "role_arn": "arn:aws:iam::950766978386:role/WindowsVulnScannerRole",
+        "regions": ["us-east-1"],
+    },
+}
+
+
+def _get_spoke_session(hub_session, role_arn: str):
+    """Assume role in spoke account and return a new session."""
     import boto3
+    sts = hub_session.client("sts")
+    creds = sts.assume_role(
+        RoleArn=role_arn,
+        RoleSessionName=f"VulnShield-{datetime.now().strftime('%Y%m%d%H%M%S')}",
+        DurationSeconds=3600,
+    )["Credentials"]
+    return boto3.Session(
+        aws_access_key_id=creds["AccessKeyId"],
+        aws_secret_access_key=creds["SecretAccessKey"],
+        aws_session_token=creds["SessionToken"],
+    )
 
-    _errors = []
 
-    session_kwargs = {"region_name": "us-west-1"}
-    if aws_access_key and aws_secret_key:
-        session_kwargs["aws_access_key_id"] = aws_access_key
-        session_kwargs["aws_secret_access_key"] = aws_secret_key
-
-    session = boto3.Session(**session_kwargs)
-
-    # Discover across all regions where we found Windows servers
-    scan_regions = ["us-east-1", "us-west-1", "us-east-2"]
-    all_servers = []
-
-    for region in scan_regions:
+def _discover_account_servers(session, account_id: str, account_name: str, regions: list, errors: list) -> list:
+    """Discover Windows servers in a single account using a boto3 session."""
+    servers = []
+    for region in regions:
         try:
             ec2 = session.client("ec2", region_name=region)
             ssm = session.client("ssm", region_name=region)
 
-            # Get Windows instances
             resp = ec2.describe_instances(
                 Filters=[
                     {"Name": "platform", "Values": ["windows"]},
@@ -1078,7 +1089,6 @@ def _discover_live_servers(connector) -> tuple:
                 ],
             )
 
-            # Get SSM info keyed by instance ID
             ssm_info = {}
             try:
                 ssm_resp = ssm.describe_instance_information(
@@ -1087,7 +1097,7 @@ def _discover_live_servers(connector) -> tuple:
                 for si in ssm_resp.get("InstanceInformationList", []):
                     ssm_info[si["InstanceId"]] = si
             except Exception as ssm_err:
-                _errors.append(f"SSM {region}: {ssm_err}")
+                errors.append(f"SSM {account_id}/{region}: {ssm_err}")
 
             for reservation in resp.get("Reservations", []):
                 for inst in reservation.get("Instances", []):
@@ -1100,17 +1110,14 @@ def _discover_live_servers(connector) -> tuple:
                     os_build = ssm_data.get("PlatformVersion", "") if ssm_data else ""
                     is_ssm_online = ssm_data is not None and ssm_data.get("PingStatus") == "Online"
 
-                    # Real vulnerability assessment for SSM-connected servers
                     critical, high, medium, compliance = 0, 0, 0, 0.0
                     if is_ssm_online:
-                        critical, high, medium, compliance = _run_live_vuln_check(
-                            ssm, iid, _errors
-                        )
+                        critical, high, medium, compliance = _run_live_vuln_check(ssm, iid, errors)
 
-                    all_servers.append(WindowsServer(
+                    servers.append(WindowsServer(
                         instance_id=iid,
-                        account_id=mgmt_account,
-                        account_name="Splunk COE / Primary",
+                        account_id=account_id,
+                        account_name=account_name,
                         hostname=tags.get("Name", iid),
                         private_ip=inst.get("PrivateIpAddress", "N/A"),
                         os_version=os_name,
@@ -1125,24 +1132,68 @@ def _discover_live_servers(connector) -> tuple:
                         tags={**tags, "InstanceType": inst.get("InstanceType", "")},
                     ))
         except Exception as e:
-            _errors.append(f"EC2 {region}: {e}")
+            errors.append(f"EC2 {account_id}/{region}: {e}")
+    return servers
+
+
+def _discover_live_servers(connector) -> tuple:
+    """Discover Windows servers across hub + spoke accounts."""
+    import boto3
+
+    _errors = []
+
+    session_kwargs = {"region_name": "us-west-1"}
+    if aws_access_key and aws_secret_key:
+        session_kwargs["aws_access_key_id"] = aws_access_key
+        session_kwargs["aws_secret_access_key"] = aws_secret_key
+
+    hub_session = boto3.Session(**session_kwargs)
+
+    # Hub account — direct discovery
+    hub_regions = ["us-east-1", "us-west-1", "us-east-2"]
+    all_servers = _discover_account_servers(
+        hub_session, mgmt_account, "Splunk COE / Primary", hub_regions, _errors
+    )
+
+    # Spoke accounts — cross-account via AssumeRole
+    all_accounts = []
+    for spoke_id, spoke_info in SPOKE_ACCOUNTS.items():
+        try:
+            spoke_session = _get_spoke_session(hub_session, spoke_info["role_arn"])
+            spoke_servers = _discover_account_servers(
+                spoke_session, spoke_id, spoke_info["name"], spoke_info["regions"], _errors
+            )
+            all_servers.extend(spoke_servers)
+            all_accounts.append(AWSAccount(
+                account_id=spoke_id,
+                account_name=spoke_info["name"],
+                ou_path="Production",
+                region=", ".join(spoke_info["regions"]),
+                server_count=len(spoke_servers),
+                critical_vulns=sum(s.critical_vulns for s in spoke_servers),
+                high_vulns=sum(s.high_vulns for s in spoke_servers),
+                last_scan=datetime.now().strftime("%Y-%m-%d %H:%M"),
+            ))
+        except Exception as e:
+            _errors.append(f"AssumeRole {spoke_id}: {e}")
 
     # Store errors for debug display
     st.session_state["_live_errors"] = _errors
 
-    # Build account summary from real data
-    account = AWSAccount(
+    # Build hub account summary
+    hub_servers = [s for s in all_servers if s.account_id == mgmt_account]
+    hub_account = AWSAccount(
         account_id=mgmt_account,
         account_name="Splunk COE / Primary",
         ou_path="Production",
         region="us-east-1, us-west-1, us-east-2",
-        server_count=len(all_servers),
-        critical_vulns=sum(s.critical_vulns for s in all_servers),
-        high_vulns=sum(s.high_vulns for s in all_servers),
+        server_count=len(hub_servers),
+        critical_vulns=sum(s.critical_vulns for s in hub_servers),
+        high_vulns=sum(s.high_vulns for s in hub_servers),
         last_scan=datetime.now().strftime("%Y-%m-%d %H:%M"),
     )
 
-    return [account], all_servers
+    return [hub_account] + all_accounts, all_servers
 
 
 def get_accounts():
