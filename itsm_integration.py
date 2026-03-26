@@ -213,6 +213,58 @@ Rollback Available: Yes (system restore point)
         # API call
         return self._create_record("change_request", payload)
 
+    # ===================== APPROVAL MANAGEMENT =====================
+
+    def add_approver_to_change(self, chg_sys_id: str, approver_sys_id: str) -> Dict:
+        """Add an approver to a change request."""
+        return self._create_record("sysapproval_approver", {
+            "sysapproval": chg_sys_id,
+            "approver": approver_sys_id,
+            "state": "requested",
+            "source_table": "change_request",
+        })
+
+    def get_approval_status(self, chg_sys_id: str) -> List[Dict]:
+        """Get approval status for a change request."""
+        session = self._get_session()
+        if not session:
+            return [{"approver": "Security Approver", "state": "requested", "_simulated": True}]
+
+        try:
+            url = (
+                f"{self.config.table_api_url}/sysapproval_approver"
+                f"?sysparm_query=sysapproval={chg_sys_id}"
+                f"&sysparm_fields=approver,state,sys_updated_on,comments"
+            )
+            response = session.get(url, timeout=10)
+            if response.status_code == 200:
+                return response.json().get("result", [])
+            return []
+        except Exception:
+            return []
+
+    def approve_change(self, approval_sys_id: str, comments: str = "Approved by VulnShield AI") -> Dict:
+        """Approve a change request approval record."""
+        return self.update_ticket("sysapproval_approver", approval_sys_id, {
+            "state": "approved",
+            "comments": comments,
+        })
+
+    def reject_change(self, approval_sys_id: str, comments: str = "Rejected") -> Dict:
+        """Reject a change request approval record."""
+        return self.update_ticket("sysapproval_approver", approval_sys_id, {
+            "state": "rejected",
+            "comments": comments,
+        })
+
+    def get_change_with_approvals(self, chg_number: str) -> Dict:
+        """Get a change request with its approval status."""
+        chg = self.get_ticket("change_request", chg_number)
+        if chg and chg.get("sys_id"):
+            approvals = self.get_approval_status(chg["sys_id"])
+            chg["_approvals"] = approvals
+        return chg
+
     # ===================== INCIDENTS (INC) =====================
 
     def create_incident(

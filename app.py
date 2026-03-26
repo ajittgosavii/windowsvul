@@ -62,6 +62,7 @@ SSO_USERS = {
     "devops": {"password": "devops123", "role": "DevOps Engineer", "name": "DevOps Team", "email": "devops@enterprise.com"},
     "auditor": {"password": "auditor123", "role": "Compliance Auditor", "name": "Audit Team", "email": "auditor@enterprise.com"},
     "demo": {"password": "demo", "role": "Demo User", "name": "Demo Account", "email": "demo@enterprise.com"},
+    "approver": {"password": "approver123", "role": "Security Approver", "name": "Security Approver", "email": "security.approver@enterprise.com"},
 }
 
 if "authenticated" not in st.session_state:
@@ -2197,6 +2198,39 @@ with tab_itsm:
                 "time": datetime.now().strftime("%H:%M:%S"),
                 "action": f"Manual CHG created: {ticket_num} for {manual_cve}",
             })
+
+    # Approval Status Sync
+    st.divider()
+    st.markdown(f"#### Approval Tracking {badge_real_snow()}", unsafe_allow_html=True)
+    st.caption("Check if CHG tickets have been approved in ServiceNow")
+
+    chg_to_check = st.text_input("CHG Ticket Number", value="CHG0030042", key="chg_check_number")
+    if st.button("🔄 Check Approval Status", key="check_approval"):
+        if snow:
+            chg_data = snow.get_change_with_approvals(chg_to_check)
+            if chg_data and not chg_data.get("error"):
+                st.markdown(f"**{chg_to_check}:** {chg_data.get('short_description', 'N/A')}")
+                st.markdown(f"**State:** {chg_data.get('state', 'N/A')}")
+
+                approvals = chg_data.get("_approvals", [])
+                if approvals:
+                    st.markdown("**Approvers:**")
+                    for appr in approvals:
+                        appr_name = appr.get("approver", {}).get("display_value", "Unknown") if isinstance(appr.get("approver"), dict) else appr.get("approver", "Unknown")
+                        state = appr.get("state", "unknown")
+                        state_icon = {"approved": "✅", "rejected": "❌", "requested": "⏳"}.get(state, "❓")
+                        st.markdown(f"- {state_icon} **{appr_name}** — {state.upper()}")
+
+                        if state == "approved":
+                            st.success(f"Approved! This CHG can now proceed to remediation.")
+                        elif state == "rejected":
+                            st.error(f"Rejected by approver. Review and resubmit.")
+                else:
+                    st.info("No approval records found for this ticket.")
+            else:
+                st.warning(f"Could not find {chg_to_check}")
+
+    st.caption(f"Approver user: **security_approver** / password: **Approver123!**\nLogin at {snow_url} to approve/reject CHG tickets")
 
     # CMDB sync
     st.divider()
