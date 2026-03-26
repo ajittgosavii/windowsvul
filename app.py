@@ -940,6 +940,93 @@ def _ensure_connector() -> AWSMultiAccountConnector:
         )
     return st.session_state["aws_connector"]
 
+def _run_live_vuln_check(ssm_client, instance_id: str, errors: list) -> tuple:
+    """Run real-time vulnerability check via SSM and return (critical, high, medium, compliance)."""
+    import json as _json
+    import time
+
+    scan_script = (
+        '$ErrorActionPreference = "SilentlyContinue"; '
+        '$r = @{ patches = (Get-HotFix).Count; '
+        'lastPatch = [string]((Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 1).InstalledOn); '
+        'tls12 = [bool](Get-ItemProperty -Path "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\SCHANNEL\\Protocols\\TLS 1.2\\Server" -Name Enabled -EA SilentlyContinue).Enabled; '
+        'defender = [bool](Get-MpComputerStatus -EA SilentlyContinue).RealTimeProtectionEnabled; '
+        'defSigAge = (Get-MpComputerStatus -EA SilentlyContinue).AntivirusSignatureAge; '
+        'smb1 = [bool](Get-SmbServerConfiguration).EnableSMB1Protocol; '
+        'nla = [bool](Get-ItemProperty -Path "HKLM:\\System\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp" -Name UserAuthentication -EA SilentlyContinue).UserAuthentication; '
+        'rdpOpen = [bool](Get-NetTCPConnection -State Listen -EA SilentlyContinue | Where-Object LocalPort -eq 3389); '
+        'smbOpen = [bool](Get-NetTCPConnection -State Listen -EA SilentlyContinue | Where-Object LocalPort -eq 445); '
+        'winrmOpen = [bool](Get-NetTCPConnection -State Listen -EA SilentlyContinue | Where-Object LocalPort -eq 5985) }; '
+        '$r | ConvertTo-Json'
+    )
+
+    try:
+        resp = ssm_client.send_command(
+            InstanceIds=[instance_id],
+            DocumentName="AWS-RunPowerShellScript",
+            Parameters={"commands": [scan_script]},
+            TimeoutSeconds=30,
+        )
+        cmd_id = resp["Command"]["CommandId"]
+
+        # Wait for result (up to 20s)
+        for _ in range(10):
+            time.sleep(2)
+            try:
+                result = ssm_client.get_command_invocation(
+                    CommandId=cmd_id, InstanceId=instance_id,
+                )
+                if result["Status"] in ("Success", "Failed", "TimedOut"):
+                    break
+            except Exception:
+                continue
+
+        if result["Status"] == "Success":
+            data = _json.loads(result["StandardOutputContent"])
+
+            critical, high, medium = 0, 0, 0
+
+            # TLS 1.2 not enabled = CRITICAL
+            if not data.get("tls12"):
+                critical += 1
+            # SMBv1 enabled = CRITICAL
+            if data.get("smb1"):
+                critical += 1
+            # Defender disabled = CRITICAL
+            if not data.get("defender"):
+                critical += 1
+            # Defender signatures stale (>7 days) = HIGH
+            if data.get("defSigAge", 0) > 7:
+                high += 1
+            # Patches stale (< 5 installed or last patch > 60 days ago) = HIGH
+            if data.get("patches", 0) < 10:
+                high += 1
+            # RDP open = HIGH
+            if data.get("rdpOpen"):
+                high += 1
+            # SMB open = MEDIUM
+            if data.get("smbOpen"):
+                medium += 1
+            # WinRM open = MEDIUM
+            if data.get("winrmOpen"):
+                medium += 1
+            # NLA not enabled = HIGH
+            if not data.get("nla"):
+                high += 1
+
+            total_checks = 9
+            passed = total_checks - critical - high - medium
+            compliance = round(max(passed / total_checks, 0), 2)
+
+            return critical, high, medium, compliance
+
+    except Exception as e:
+        errors.append(f"VulnCheck {instance_id}: {e}")
+
+    # Fallback if scan fails
+    return 0, 0, 0, 0.0
+
+
 def _discover_live_servers(connector) -> tuple:
     """Directly query EC2 + SSM for real Windows servers (no Organizations needed)."""
     import boto3
@@ -992,6 +1079,13 @@ def _discover_live_servers(connector) -> tuple:
                     os_build = ssm_data.get("PlatformVersion", "") if ssm_data else ""
                     is_ssm_online = ssm_data is not None and ssm_data.get("PingStatus") == "Online"
 
+                    # Real vulnerability assessment for SSM-connected servers
+                    critical, high, medium, compliance = 0, 0, 0, 0.0
+                    if is_ssm_online:
+                        critical, high, medium, compliance = _run_live_vuln_check(
+                            ssm, iid, _errors
+                        )
+
                     all_servers.append(WindowsServer(
                         instance_id=iid,
                         account_id=mgmt_account,
@@ -1003,10 +1097,10 @@ def _discover_live_servers(connector) -> tuple:
                         region=region,
                         status="Online" if state == "running" else "Stopped",
                         ssm_status="Online" if is_ssm_online else "Offline",
-                        patch_compliance=0.85 if is_ssm_online else 0.0,
-                        critical_vulns=3 if is_ssm_online else 0,
-                        high_vulns=5 if is_ssm_online else 0,
-                        medium_vulns=8 if is_ssm_online else 0,
+                        patch_compliance=compliance,
+                        critical_vulns=critical,
+                        high_vulns=high,
+                        medium_vulns=medium,
                         tags={**tags, "InstanceType": inst.get("InstanceType", "")},
                     ))
         except Exception as e:
