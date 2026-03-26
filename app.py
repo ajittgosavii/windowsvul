@@ -720,11 +720,32 @@ with st.sidebar:
 
     st.divider()
 
+    # ==================== DATA MODE TOGGLE ====================
+    st.markdown("## 🔀 Data Mode")
+    data_mode = st.toggle("Live AWS", value=False, key="data_mode_toggle")
+
+    if data_mode:
+        st.markdown("""
+        <div style="background:#0f3460; color:white; padding:0.5rem 0.8rem; border-radius:8px; font-size:0.8rem;">
+            🟢 <strong>LIVE</strong> — Real AWS API calls via SSM<br>
+            <span style="font-size:0.7rem; opacity:0.7;">Querying account 448549863273</span>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="background:#6c757d; color:white; padding:0.5rem 0.8rem; border-radius:8px; font-size:0.8rem;">
+            🔵 <strong>DEMO</strong> — Simulated data for presentation<br>
+            <span style="font-size:0.7rem; opacity:0.7;">6 accounts, ~60 servers, sample CVEs</span>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.divider()
+
     # Connection status indicators
     st.markdown("## 🛡️ Connections")
     cs1, cs2, cs3 = st.columns(3)
     cs1.markdown(f"{'🟢' if api_key else '⚪'} **AI**")
-    cs2.markdown(f"{'🟢' if aws_access_key else '⚪'} **AWS**")
+    cs2.markdown(f"{'🟢' if (aws_access_key and data_mode) else ('🔵' if not data_mode else '⚪')} **AWS**")
     cs3.markdown(f"{'🟢' if snow_pass else '⚪'} **ITSM**")
 
     st.divider()
@@ -770,13 +791,26 @@ with st.sidebar:
             aws_secret_key=aws_secret_key if aws_secret_key else None,
         )
         st.session_state["aws_connector"] = connector
-        accounts = connector.discover_accounts()
-        # Filter to selected
-        accounts = [a for a in accounts if a.account_id in selected_accounts]
-        st.session_state["accounts"] = accounts
-        servers = connector.discover_all_servers(accounts)
-        st.session_state["servers"] = servers
-        st.success(f"Connected: {len(accounts)} accounts, {len(servers)} servers")
+
+        if data_mode:
+            # LIVE: Real AWS API calls
+            with st.spinner("Querying AWS Organizations & SSM..."):
+                accounts = connector.discover_accounts()
+                accounts = [a for a in accounts if a.account_id in selected_accounts]
+                st.session_state["accounts"] = accounts
+                servers = connector.discover_all_servers(accounts)
+                st.session_state["servers"] = servers
+            st.success(f"LIVE: {len(accounts)} accounts, {len(servers)} servers")
+        else:
+            # DEMO: Simulated data
+            accounts = connector._get_fallback_accounts()
+            accounts = [a for a in accounts if a.account_id in selected_accounts]
+            st.session_state["accounts"] = accounts
+            servers = []
+            for acct in accounts:
+                servers.extend(connector._get_demo_servers(acct))
+            st.session_state["servers"] = servers
+            st.success(f"DEMO: {len(accounts)} accounts, {len(servers)} servers")
 
     st.divider()
 
@@ -789,7 +823,7 @@ with st.sidebar:
     require_restore = st.checkbox("Require Restore Point", value=True, key="restore")
 
     st.divider()
-    st.caption("v3.0 Enterprise | 12 AI Agents")
+    st.caption(f"v3.0 Enterprise | 12 AI Agents | {'LIVE' if data_mode else 'DEMO'}")
 
 
 # ==================== INITIALIZE PIPELINE ====================
@@ -821,9 +855,14 @@ def get_pipeline() -> AgenticPipeline:
 
 
 # ==================== HEADER ====================
-st.markdown("""
+_mode_badge = (
+    '<span style="background:#28a745;color:white;padding:2px 10px;border-radius:10px;font-size:0.7rem;margin-left:0.8rem;vertical-align:middle;">LIVE</span>'
+    if is_live_mode() else
+    '<span style="background:#6c757d;color:white;padding:2px 10px;border-radius:10px;font-size:0.7rem;margin-left:0.8rem;vertical-align:middle;">DEMO</span>'
+)
+st.markdown(f"""
 <div class="main-header">
-    <h1>🛡️ Agentic AI — Enterprise Windows Vulnerability Management</h1>
+    <h1>🛡️ Agentic AI — Enterprise Windows Vulnerability Management {_mode_badge}</h1>
     <p>Multi-Account AWS | ServiceNow ITSM | AI Confidence Routing | Human-in-the-Loop | 200+ Accounts</p>
 </div>
 """, unsafe_allow_html=True)
@@ -844,11 +883,14 @@ st.markdown("""
 ])
 
 
-# ==================== HELPER: get demo data if no live connection ====================
+# ==================== HELPER: load data based on Demo/Live toggle ====================
+def is_live_mode() -> bool:
+    return st.session_state.get("data_mode_toggle", False)
+
 def get_accounts():
     if st.session_state["accounts"]:
         return st.session_state["accounts"]
-    # Demo data
+    # Auto-load demo data when in demo mode (or no connection yet)
     connector = AWSMultiAccountConnector(management_account_id=mgmt_account)
     accounts = connector._get_fallback_accounts()
     st.session_state["accounts"] = accounts
